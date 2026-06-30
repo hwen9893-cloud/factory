@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Cultivation Studio 设计策略驾驶舱</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202326;
+      --muted: #65707a;
+      --line: #d8dee4;
+      --paper: #f7f5ef;
+      --panel: #ffffff;
+      --teal: #0f766e;
+      --blue: #2563eb;
+      --rose: #be123c;
+      --amber: #b45309;
+      --green: #15803d;
+      --charcoal: #263238;
+      --shadow: 0 16px 40px rgba(32, 35, 38, .10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, .10), transparent 32%),
+        linear-gradient(315deg, rgba(190, 18, 60, .08), transparent 28%),
+        var(--paper);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      width: min(1440px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 42px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 10px 0 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      font-weight: 800;
+      color: var(--teal);
+      border-radius: 8px;
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav a {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--charcoal);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(320px, .95fr) minmax(420px, 1.4fr);
+      gap: 22px;
+      align-items: stretch;
+      min-height: 430px;
+      margin-bottom: 22px;
+    }
+
+    .hero-copy {
+      padding: 28px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--teal);
+      text-transform: uppercase;
+    }
+
+    .hero-copy h2 {
+      margin: 0;
+      font-size: clamp(36px, 5vw, 68px);
+      line-height: .96;
+      letter-spacing: 0;
+      max-width: 780px;
+    }
+
+    .hero-copy p {
+      margin: 18px 0 0;
+      max-width: 680px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+      max-width: 680px;
+    }
+
+    .stat {
+      border-top: 3px solid var(--teal);
+      background: rgba(255,255,255,.68);
+      padding: 12px;
+      min-height: 86px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .strategy-map {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: 8px;
+      padding: 18px;
+      min-height: 430px;
+    }
+
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      height: 100%;
+    }
+
+    .layer {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfd;
+      min-height: 82px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .layer:nth-child(1) { border-top: 4px solid var(--charcoal); }
+    .layer:nth-child(2) { border-top: 4px solid var(--blue); }
+    .layer:nth-child(3) { border-top: 4px solid var(--green); }
+    .layer:nth-child(4) { border-top: 4px solid var(--teal); }
+    .layer:nth-child(5) { border-top: 4px solid var(--amber); }
+    .layer:nth-child(6) { border-top: 4px solid var(--rose); }
+
+    .layer small {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .layer b {
+      margin-top: 8px;
+      font-size: 15px;
+    }
+
+    .flow {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 10px;
+    }
+
+    .flow-step {
+      position: relative;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 13px;
+      min-height: 106px;
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      width: 10px;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .flow-step strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .section {
+      margin-top: 28px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .section h3 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 560px;
+      line-height: 1.5;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: 1.05fr 1.4fr .9fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      background: rgba(255,255,255,.88);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 10px 28px rgba(32, 35, 38, .06);
+    }
+
+    .panel h4 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .phase code {
+      display: grid;
+      place-items: center;
+      min-height: 42px;
+      border-radius: 6px;
+      background: #eef6f5;
+      color: var(--teal);
+      font-weight: 800;
+      font-family: inherit;
+    }
+
+    .phase strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .phase span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .loop {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .loop-item {
+      min-height: 120px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .loop-item b {
+      display: block;
+      color: var(--charcoal);
+      margin-bottom: 8px;
+    }
+
+    .loop-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .risk-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .risk {
+      border-left: 4px solid var(--amber);
+      background: #fff;
+      padding: 11px 12px;
+      border-radius: 0 8px 8px 0;
+      border-top: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .risk.high {
+      border-left-color: var(--rose);
+    }
+
+    .risk.ok {
+      border-left-color: var(--green);
+    }
+
+    .risk strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .risk span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .doc-link {
+      min-height: 118px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px;
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .doc-link:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .doc-link small {
+      display: inline-block;
+      margin-bottom: 12px;
+      color: var(--teal);
+      font-weight: 800;
+    }
+
+    .doc-link b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .doc-link span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .reader {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .reader-sidebar,
+    .markdown-shell {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(32, 35, 38, .06);
+    }
+
+    .reader-sidebar {
+      position: sticky;
+      top: 18px;
+      padding: 12px;
+    }
+
+    .reader-sidebar h4,
+    .markdown-toolbar h4 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .doc-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .doc-list button,
+    .markdown-toolbar a {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--charcoal);
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .doc-list button {
+      padding: 8px 9px;
+    }
+
+    .doc-list button:hover,
+    .doc-list button.is-active {
+      border-color: rgba(15, 118, 110, .45);
+      background: #eef6f5;
+      color: var(--teal);
+    }
+
+    .markdown-shell {
+      overflow: hidden;
+    }
+
+    .markdown-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      min-height: 54px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f6f8fa;
+    }
+
+    .markdown-toolbar a {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 10px;
+      white-space: nowrap;
+    }
+
+    .markdown-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .markdown-body {
+      padding: 28px 32px 34px;
+      color: #24292f;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: auto;
+    }
+
+    .markdown-body > :first-child {
+      margin-top: 0;
+    }
+
+    .markdown-body h1,
+    .markdown-body h2 {
+      padding-bottom: .3em;
+      border-bottom: 1px solid #d8dee4;
+    }
+
+    .markdown-body h1 {
+      margin: 0 0 16px;
+      font-size: 2em;
+      line-height: 1.25;
+    }
+
+    .markdown-body h2 {
+      margin: 24px 0 16px;
+      font-size: 1.5em;
+      line-height: 1.25;
+    }
+
+    .markdown-body h3 {
+      margin: 24px 0 12px;
+      font-size: 1.25em;
+      line-height: 1.25;
+    }
+
+    .markdown-body h4 {
+      margin: 18px 0 10px;
+      font-size: 1em;
+    }
+
+    .markdown-body p,
+    .markdown-body blockquote,
+    .markdown-body ul,
+    .markdown-body ol,
+    .markdown-body table,
+    .markdown-body pre {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+
+    .markdown-body blockquote {
+      padding: 0 1em;
+      color: #57606a;
+      border-left: .25em solid #d0d7de;
+    }
+
+    .markdown-body ul,
+    .markdown-body ol {
+      padding-left: 2em;
+    }
+
+    .markdown-body li + li {
+      margin-top: .25em;
+    }
+
+    .markdown-body code {
+      padding: .2em .4em;
+      border-radius: 6px;
+      background: rgba(175, 184, 193, .20);
+      font-family: ui-monospace, SFMono-Regular, SFMono, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 85%;
+    }
+
+    .markdown-body pre {
+      padding: 16px;
+      overflow: auto;
+      border-radius: 6px;
+      background: #f6f8fa;
+      border: 1px solid #d8dee4;
+    }
+
+    .markdown-body pre code {
+      padding: 0;
+      background: transparent;
+      font-size: 85%;
+      white-space: pre;
+    }
+
+    .markdown-body table {
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      overflow: auto;
+      border-spacing: 0;
+      border-collapse: collapse;
+    }
+
+    .markdown-body th,
+    .markdown-body td {
+      padding: 6px 13px;
+      border: 1px solid #d0d7de;
+      vertical-align: top;
+    }
+
+    .markdown-body tr {
+      background: #fff;
+      border-top: 1px solid #d8dee4;
+    }
+
+    .markdown-body tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+
+    .markdown-body a {
+      color: #0969da;
+      text-decoration: none;
+    }
+
+    .markdown-body a:hover {
+      text-decoration: underline;
+    }
+
+    .markdown-body hr {
+      height: .25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #d0d7de;
+      border: 0;
+    }
+
+    .markdown-empty {
+      color: var(--muted);
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+
+    .footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1050px) {
+      .hero,
+      .matrix,
+      .reader {
+        grid-template-columns: 1fr;
+      }
+
+      .reader-sidebar {
+        position: static;
+      }
+
+      .map-grid,
+      .flow,
+      .docs-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .flow {
+        grid-column: auto;
+      }
+
+      .flow-step:not(:last-child)::after {
+        display: none;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell {
+        width: min(100vw - 20px, 620px);
+        padding-top: 16px;
+      }
+
+      .topbar,
+      .section-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .hero-copy {
+        padding: 18px 0 6px;
+      }
+
+      .hero-copy h2 {
+        font-size: 36px;
+        line-height: 1.02;
+      }
+
+      .stats,
+      .map-grid,
+      .flow,
+      .loop,
+      .docs-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .strategy-map {
+        padding: 12px;
+      }
+
+      .phase {
+        grid-template-columns: 64px 1fr;
+      }
+
+      .markdown-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .markdown-body {
+        padding: 20px 16px 26px;
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="./README.md">
+        <span class="mark">AI</span>
+        <span>
+          <h1>AI Cultivation Studio</h1>
+          <p>设计策略驾驶舱 · 文档 v1.0 / 2026-06</p>
+        </span>
+      </a>
+      <nav class="nav" aria-label="核心文档">
+        <a href="./docs/21-精益路线.md" data-doc="./docs/21-精益路线.md">精益路线</a>
+        <a href="./docs/31-系统架构.md" data-doc="./docs/31-系统架构.md">系统架构</a>
+        <a href="./docs/52-一致性技术预研方案.md" data-doc="./docs/52-一致性技术预研方案.md">一致性关卡</a>
+        <a href="./docs/72-评测工程EvalHarness.md" data-doc="./docs/72-评测工程EvalHarness.md">评测工程</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Market-first · Local First · 3 人团队</p>
+        <h2>先验证内容，再把有效路径做成工厂。</h2>
+        <p>
+          这套设计的主轴不是先造完整平台，而是用最小内容实验拿真实市场信号，
+          再围绕通过验证的形式建设最小自动化、资产中心、知识中心与评测闭环。
+        </p>
+        <div class="stats" aria-label="核心约束">
+          <div class="stat">
+            <strong>3</strong>
+            <span>剧情设计 / 美工设计 / 代码实现，所有模块按小团队能力裁剪。</span>
+          </div>
+          <div class="stat">
+            <strong>0-6 周</strong>
+            <span>Phase 0 不建平台，用现成工具发布 2-3 条内容找信号。</span>
+          </div>
+          <div class="stat">
+            <strong>M3.5</strong>
+            <span>视频路径必须通过身份、跨模态、时序、设定四维一致性关卡。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="strategy-map" aria-label="六层架构与流水线">
+        <div class="map-grid">
+          <div class="layer"><small>L1</small><b>Presentation</b><small>Dashboard / CLI / API</small></div>
+          <div class="layer"><small>L2</small><b>Workflow</b><small>orchestrator / LangGraph</small></div>
+          <div class="layer"><small>L3</small><b>Business</b><small>factory.*</small></div>
+          <div class="layer"><small>L4</small><b>Knowledge</b><small>center.knowledge / asset / qa</small></div>
+          <div class="layer"><small>L5</small><b>Model</b><small>center.model 多后端</small></div>
+          <div class="layer"><small>L6</small><b>Infra</b><small>Docker / Redis / MinIO</small></div>
+
+          <div class="flow">
+            <div class="flow-step">
+              <strong>Idea / Seed</strong>
+              <span>单一修仙故事种子，先跨形式测试，避免一开始就押注全动画。</span>
+            </div>
+            <div class="flow-step">
+              <strong>Knowledge</strong>
+              <span>世界观、角色、宗门、时间线进入 center.knowledge，作为事实源。</span>
+            </div>
+            <div class="flow-step">
+              <strong>Novel / Screenplay</strong>
+              <span>factory.novel 产出章节与 Beat Cards，桥接视觉、音频和动画。</span>
+            </div>
+            <div class="flow-step">
+              <strong>Asset / Media</strong>
+              <span>factory.visual / audio / animation 只在必要时扩展，产物入 asset。</span>
+            </div>
+            <div class="flow-step">
+              <strong>Eval / Publishing</strong>
+              <span>市场、内容、一致性、经济性指标回流下一轮创作与范围决策。</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="strategy">
+      <div class="section-head">
+        <h3>策略主线</h3>
+        <p>把 README 与 2x、3x、5x、7x 文档压缩成一个可讲、可审、可落地的路线图。</p>
+      </div>
+      <div class="matrix">
+        <div class="panel">
+          <h4>阶段门</h4>
+          <div class="timeline">
+            <div class="phase"><code>P0</code><div><strong>市场验证</strong><span>有声书 / 动态漫优先；不写平台代码，只看真实反馈。</span></div></div>
+            <div class="phase"><code>P1</code><div><strong>最小自动化</strong><span>只自动化跑通的形式，优先知识库、小说链路和评测脚本。</span></div></div>
+            <div class="phase"><code>P2</code><div><strong>规模化生产</strong><span>扩展资产、一致性、音频或视频能力，并卡住 M3.5。</span></div></div>
+            <div class="phase"><code>P3</code><div><strong>IP 工厂化</strong><span>多形式、多平台、运营中心后置，避免早期过度抽象。</span></div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>评测闭环</h4>
+          <div class="loop">
+            <div class="loop-item"><b>市场信号</b><p>完播率、追更、互动、涨粉、评论情绪决定是否进入自动化。</p></div>
+            <div class="loop-item"><b>内容质量</b><p>设定冲突、人工修改率、角色量化分布约束 factory.novel。</p></div>
+            <div class="loop-item"><b>一致性</b><p>身份、跨模态、时序、设定四个维度决定视频路线能否放行。</p></div>
+            <div class="loop-item"><b>经济性</b><p>单章成本、GPU 成本、人工工时、收入趋势决定是否规模化。</p></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>设计风险</h4>
+          <div class="risk-list">
+            <div class="risk high"><strong>执行口径未完全冻结</strong><span>命名规范的启动前 checklist 仍未勾选，和 Active 状态存在张力。</span></div>
+            <div class="risk high"><strong>Phase 0 与工程指标混杂</strong><span>部分成功标准仍像完整平台验收，应标注为 Phase 1+。</span></div>
+            <div class="risk"><strong>表前缀覆盖不足</strong><span>数据契约列出 novel / visual，尚未覆盖 audio / animation / publishing。</span></div>
+            <div class="risk ok"><strong>核心取舍清晰</strong><span>Mac Studio、云 GPU、Market-first 和 M3.5 的边界已经形成闭环。</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="docs">
+      <div class="section-head">
+        <h3>文档入口</h3>
+        <p>按“先决策、再架构、再执行、再评测”的阅读顺序聚合核心文件。</p>
+      </div>
+      <div class="docs-grid">
+        <a class="doc-link" href="./docs/21-精益路线.md" data-doc="./docs/21-精益路线.md"><small>21</small><b>精益路线</b><span>Market-first、三人约束、范围削减与 Phase 0。</span></a>
+        <a class="doc-link" href="./docs/31-系统架构.md" data-doc="./docs/31-系统架构.md"><small>31</small><b>系统架构</b><span>六层 Local First 架构、factory / center 边界。</span></a>
+        <a class="doc-link" href="./docs/43-factory.novel流水线规范.md" data-doc="./docs/43-factory.novel流水线规范.md"><small>43</small><b>小说流水线</b><span>从大纲、章节到 screenplay 的 Schema 与图定义。</span></a>
+        <a class="doc-link" href="./docs/51-一致性Playbook.md" data-doc="./docs/51-一致性Playbook.md"><small>51</small><b>一致性 Playbook</b><span>Mac 与云 GPU 的视觉一致性落地手册。</span></a>
+        <a class="doc-link" href="./docs/52-一致性技术预研方案.md" data-doc="./docs/52-一致性技术预研方案.md"><small>52</small><b>M3.5 关卡</b><span>四维一致性指标、预研排期和 Go / No-Go。</span></a>
+        <a class="doc-link" href="./docs/61-数据契约与Schema.md" data-doc="./docs/61-数据契约与Schema.md"><small>61</small><b>数据契约</b><span>ID、表结构、lineage 与跨模块契约。</span></a>
+        <a class="doc-link" href="./docs/62-AgentSkills实现规范.md" data-doc="./docs/62-AgentSkills实现规范.md"><small>62</small><b>Skill 实现</b><span>代码骨架、LangGraph 注册、失败语义与幂等。</span></a>
+        <a class="doc-link" href="./docs/72-评测工程EvalHarness.md" data-doc="./docs/72-评测工程EvalHarness.md"><small>72</small><b>评测工程</b><span>市场、内容、系统、一致性、经济性套件。</span></a>
+      </div>
+    </section>
+
+    <section class="section" id="reader">
+      <div class="section-head">
+        <h3>Markdown 阅读器</h3>
+        <p>点击上方文档后，在这里按接近 GitHub 的 Markdown 样式渲染；原始链接仍保留为备用。</p>
+      </div>
+      <div class="reader">
+        <aside class="reader-sidebar">
+          <h4>快速打开</h4>
+          <div class="doc-list" id="docList" aria-label="文档列表"></div>
+        </aside>
+        <article class="markdown-shell">
+          <div class="markdown-toolbar">
+            <div>
+              <h4 id="readerTitle">尚未打开文档</h4>
+              <div class="markdown-status" id="readerStatus">选择一篇 Markdown 文档开始阅读。</div>
+            </div>
+            <a id="rawLink" href="./README.md">打开原始 .md</a>
+          </div>
+          <div class="markdown-body" id="markdownBody">
+            <div class="markdown-empty">Markdown 会在这里渲染成类似 GitHub 的阅读样式。</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>静态页，无构建依赖。可作为后续 Dashboard 的信息架构原型。</span>
+      <span>建议下一步：把风险列表拆成可勾选的文档治理 backlog。</span>
+    </footer>
+  </main>
+  <script>
+    const docs = [
+      ["README", "./README.md"],
+      ["21 精益路线", "./docs/21-精益路线.md"],
+      ["31 系统架构", "./docs/31-系统架构.md"],
+      ["43 小说流水线", "./docs/43-factory.novel流水线规范.md"],
+      ["51 一致性 Playbook", "./docs/51-一致性Playbook.md"],
+      ["52 M3.5 关卡", "./docs/52-一致性技术预研方案.md"],
+      ["61 数据契约", "./docs/61-数据契约与Schema.md"],
+      ["62 Skill 实现", "./docs/62-AgentSkills实现规范.md"],
+      ["72 评测工程", "./docs/72-评测工程EvalHarness.md"]
+    ];
+
+    const docList = document.getElementById("docList");
+    const reader = document.getElementById("reader");
+    const readerTitle = document.getElementById("readerTitle");
+    const readerStatus = document.getElementById("readerStatus");
+    const rawLink = document.getElementById("rawLink");
+    const markdownBody = document.getElementById("markdownBody");
+
+    docs.forEach(([label, path]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.dataset.doc = path;
+      button.addEventListener("click", () => openDoc(path));
+      docList.appendChild(button);
+    });
+
+    document.querySelectorAll("[data-doc]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        openDoc(link.dataset.doc, true);
+      });
+    });
+
+    async function openDoc(path, jumpToReader = false) {
+      setActiveDoc(path);
+      readerTitle.textContent = getDocLabel(path);
+      readerStatus.textContent = "正在读取 Markdown...";
+      rawLink.href = path;
+      markdownBody.innerHTML = '<div class="markdown-empty">正在加载文档...</div>';
+
+      try {
+        const response = await fetch(encodeURI(path));
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const markdown = await response.text();
+        markdownBody.innerHTML = renderMarkdown(markdown);
+        readerStatus.textContent = `${path.replace("./", "")} · 已渲染`;
+        if (jumpToReader) {
+          reader.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      } catch (error) {
+        markdownBody.innerHTML = `<div class="markdown-empty">无法读取 ${escapeHtml(path)}。如果你是直接双击打开 HTML，请改用本地 HTTP 服务预览。</div>`;
+        readerStatus.textContent = "读取失败";
+      }
+    }
+
+    function setActiveDoc(path) {
+      document.querySelectorAll(".doc-list button").forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.doc === path);
+      });
+    }
+
+    function getDocLabel(path) {
+      const item = docs.find(([, docPath]) => docPath === path);
+      return item ? item[0] : path.split("/").pop();
+    }
+
+    function renderMarkdown(markdown) {
+      const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+      const blocks = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        if (!line.trim()) {
+          i += 1;
+          continue;
+        }
+
+        if (/^```/.test(line)) {
+          const lang = line.replace(/^```/, "").trim();
+          const code = [];
+          i += 1;
+          while (i < lines.length && !/^```/.test(lines[i])) {
+            code.push(lines[i]);
+            i += 1;
+          }
+          i += 1;
+          blocks.push(`<pre><code${lang ? ` data-lang="${escapeHtml(lang)}"` : ""}>${escapeHtml(code.join("\n"))}</code></pre>`);
+          continue;
+        }
+
+        if (/^---+$/.test(line.trim())) {
+          blocks.push("<hr>");
+          i += 1;
+          continue;
+        }
+
+        const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+        if (heading) {
+          const level = heading[1].length;
+          const text = renderInline(heading[2].trim());
+          blocks.push(`<h${level}>${text}</h${level}>`);
+          i += 1;
+          continue;
+        }
+
+        if (/^>\s?/.test(line)) {
+          const quote = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) {
+            quote.push(lines[i].replace(/^>\s?/, ""));
+            i += 1;
+          }
+          blocks.push(`<blockquote>${renderParagraphs(quote.join("\n"))}</blockquote>`);
+          continue;
+        }
+
+        if (isTableStart(lines, i)) {
+          const tableLines = [lines[i], lines[i + 1]];
+          i += 2;
+          while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+            tableLines.push(lines[i]);
+            i += 1;
+          }
+          blocks.push(renderTable(tableLines));
+          continue;
+        }
+
+        if (/^\s*[-*]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*[-*]\s+/, ""));
+            i += 1;
+          }
+          blocks.push(`<ul>${items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ul>`);
+          continue;
+        }
+
+        if (/^\s*\d+\.\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
+            i += 1;
+          }
+          blocks.push(`<ol>${items.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ol>`);
+          continue;
+        }
+
+        const paragraph = [line];
+        i += 1;
+        while (
+          i < lines.length &&
+          lines[i].trim() &&
+          !/^```/.test(lines[i]) &&
+          !/^(#{1,6})\s+/.test(lines[i]) &&
+          !/^>\s?/.test(lines[i]) &&
+          !/^\s*[-*]\s+/.test(lines[i]) &&
+          !/^\s*\d+\.\s+/.test(lines[i]) &&
+          !isTableStart(lines, i) &&
+          !/^---+$/.test(lines[i].trim())
+        ) {
+          paragraph.push(lines[i]);
+          i += 1;
+        }
+        blocks.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+      }
+
+      return blocks.join("\n");
+    }
+
+    function renderParagraphs(text) {
+      return text
+        .split(/\n{2,}/)
+        .map((part) => `<p>${renderInline(part.replace(/\n/g, " "))}</p>`)
+        .join("");
+    }
+
+    function isTableStart(lines, index) {
+      return (
+        index + 1 < lines.length &&
+        /^\s*\|.*\|\s*$/.test(lines[index]) &&
+        /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1])
+      );
+    }
+
+    function renderTable(tableLines) {
+      const rows = tableLines.map(splitTableRow);
+      const header = rows[0] || [];
+      const bodyRows = rows.slice(2);
+      const thead = `<thead><tr>${header.map((cell) => `<th>${renderInline(cell)}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${bodyRows.map((row) => `<tr>${row.map((cell) => `<td>${renderInline(cell)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      return `<table>${thead}${tbody}</table>`;
+    }
+
+    function splitTableRow(line) {
+      return line
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim());
+    }
+
+    function renderInline(text) {
+      let html = escapeHtml(text);
+      const codeParts = [];
+      html = html.replace(/`([^`]+)`/g, (_, code) => {
+        const token = `@@CODE${codeParts.length}@@`;
+        codeParts.push(`<code>${code}</code>`);
+        return token;
+      });
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+        const safeHref = href.startsWith("http") || href.startsWith("#") || href.startsWith(".") ? href : `./docs/${href}`;
+        return `<a href="${safeHref}">${label}</a>`;
+      });
+      codeParts.forEach((code, index) => {
+        html = html.replace(`@@CODE${index}@@`, code);
+      });
+      return html;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    window.openDoc = openDoc;
+  </script>
+</body>
+</html>
