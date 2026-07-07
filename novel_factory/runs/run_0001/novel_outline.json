@@ -1,0 +1,58 @@
+{
+  "outline_id": "outline.v001",
+  "volume_no": 1,
+  "chapters": [
+    {
+      "ch_no": 1,
+      "title": "第1章 灵根初鸣",
+      "key_events": [
+        "主角遭遇宗门试炼压力",
+        "旧伤或秘密被迫暴露",
+        "以弱胜强，留下下一章钩子"
+      ],
+      "char_focus": [
+        "knowledge.character.0001"
+      ],
+      "realm_progress": "",
+      "爽点类型": "压迫/反转"
+    },
+    {
+      "ch_no": 2,
+      "title": "第2章 灵根初鸣",
+      "key_events": [
+        "主角遭遇宗门试炼压力",
+        "旧伤或秘密被迫暴露",
+        "以弱胜强，留下下一章钩子"
+      ],
+      "char_focus": [
+        "knowledge.character.0001"
+      ],
+      "realm_progress": "",
+      "爽点类型": "压迫/反转"
+    },
+    {
+      "ch_no": 3,
+      "title": "第3章 灵根初鸣",
+      "key_events": [
+        "主角遭遇宗门试炼压力",
+        "旧伤或秘密被迫暴露",
+        "以弱胜强，留下下一章钩子"
+      ],
+      "char_focus": [
+        "knowledge.character.0001"
+      ],
+      "realm_progress": "炼气期前期 -> 炼气期中期",
+      "爽点类型": "打脸/突破"
+    }
+  ],
+  "lineage": {
+    "skill": "skill.novel.outline",
+    "model": "mock-novel-write",
+    "input_ids": [
+      "knowledge.character.0001",
+      "knowledge.realm.0001",
+      "knowledge.sect.0001"
+    ],
+    "params": {}
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "novel_write": {
+    "backend": "mock",
+    "model": "mock-novel-write",
+    "options": {
+      "temperature": 0.75,
+      "top_p": 0.9,
+      "num_ctx": 8192
+    }
+  },
+  "novel_review": {
+    "backend": "mock",
+    "model": "mock-novel-review",
+    "options": {
+      "temperature": 0.2,
+      "top_p": 0.8,
+      "num_ctx": 8192
+    }
+  }
+}

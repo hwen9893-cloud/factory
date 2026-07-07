@@ -1,0 +1,11 @@
+{
+  "skill": "skill.novel.plot",
+  "artifact": "novel_plot.json",
+  "elapsed_sec": 0.0,
+  "output_keys": [
+    "ch_no",
+    "lineage",
+    "plot_id",
+    "scenes"
+  ]
+}

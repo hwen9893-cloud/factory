@@ -53,7 +53,7 @@ skill.{factory}.{action}
 | `skill.novel.outline` | 小说工厂的"生成大纲"技能 |
 | `skill.novel.chapter` | 生成章节正文 |
 | `skill.visual.charactersheet` | 生成角色定妆图 |
-| `skill.visual.lora_train` | 训练角色 LoRA（云 GPU） |
+| `skill.visual.lora_train` | 训练角色 LoRA（本地夜间，独占 GPU） |
 | `skill.audio.tts` | 文本转语音 |
 | `skill.qa.consistency` | 设定一致性校验（横切） |
 | `skill.publish.adapt` | 多平台格式适配 |

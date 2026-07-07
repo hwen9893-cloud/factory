@@ -1,0 +1,11 @@
+{
+  "skill": "skill.novel.export",
+  "artifact": "novel_export.json",
+  "elapsed_sec": 0.0,
+  "output_keys": [
+    "chapter_id",
+    "export_path",
+    "format",
+    "lineage"
+  ]
+}

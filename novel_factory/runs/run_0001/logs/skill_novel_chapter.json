@@ -1,0 +1,15 @@
+{
+  "skill": "skill.novel.chapter",
+  "artifact": "novel_chapter.json",
+  "elapsed_sec": 0.0,
+  "output_keys": [
+    "body",
+    "ch_no",
+    "chapter_id",
+    "lineage",
+    "new_knowledge",
+    "realm_changes",
+    "title",
+    "word_count"
+  ]
+}

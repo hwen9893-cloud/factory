@@ -1,0 +1,32 @@
+[
+  {
+    "id": "knowledge.character.0001",
+    "name": "陆沉",
+    "aliases": ["阿沉"],
+    "realm": "knowledge.realm.0001",
+    "sect": "knowledge.sect.0001",
+    "personality": "克制、隐忍、反击时干净利落",
+    "voice_style": "短句、低声、不解释委屈",
+    "status": "alive"
+  },
+  {
+    "id": "knowledge.character.0002",
+    "name": "赵衡",
+    "aliases": [],
+    "realm": "knowledge.realm.0001",
+    "sect": "knowledge.sect.0001",
+    "personality": "傲慢、欺软怕硬",
+    "voice_style": "讥讽、夸张、喜欢当众施压",
+    "status": "alive"
+  },
+  {
+    "id": "knowledge.character.0003",
+    "name": "沈青禾",
+    "aliases": [],
+    "realm": "knowledge.realm.0002",
+    "sect": "knowledge.sect.0001",
+    "personality": "冷静、观察力强、不轻易站队",
+    "voice_style": "清淡、理性、点到为止",
+    "status": "alive"
+  }
+]

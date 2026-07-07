@@ -26,15 +26,30 @@ backend/
       screenplay.py     # skill.novel.screenplay（小说→多维剧本卡，驱动视觉/动画）
     visual/
       charactersheet.py
-      image_gen.py
-      lora_train.py     # 云 GPU 任务
+      reference_pack.py
+      keyframe_image.py
+      image_gen.py      # 本地 ComfyUI（占 GPU，经队列调度）
+      lora_train.py     # 本地夜间训练（独占 GPU，见 32 §4）
+    animation/
+      storyboard.py
+      shotlist.py
+      video_generate.py # 本地 ComfyUI 视频（独占 GPU，夜间批处理）
+      render.py
+    audio/
+      dialogue_script.py
+      tts.py
+      subtitle_timeline.py
     qa/
       consistency.py    # 横切 skill.qa.consistency
+      identity_consistency.py
+      motion_consistency.py
     base.py             # Skill 基类与契约
   center/
     model/
       client.py         # ModelClient 统一接口（见 34）
       profiles.yaml     # profile 配置
+  infra/
+    gpu_scheduler.py    # GPU 队列调度器（单卡显存分时，见 §10）
 ```
 
 > 目录名对齐 `11` 的 factory 名；文件名对齐 skill 的 `{action}`。
@@ -121,16 +136,22 @@ graph.add_node("human_review", interrupt_for_review)
 > `skill.novel.screenplay` 将章节正文转换为**多维剧本卡（Beat Cards）**，输出供 `factory.visual` 生图和 `factory.animation` 分镜使用，是 `factory.novel` → 视觉/动画 pipeline 的桥接节点。
 
 ## 7.2 factory.visual
-`skill.visual.reference` → `skill.visual.charactersheet` → `skill.visual.image_gen` → `skill.visual.lora_train`（云） → `skill.visual.register`（写 `center.asset`）
+`skill.visual.reference` → `skill.visual.charactersheet` → `skill.visual.reference_pack` → `skill.visual.keyframe_image` → `skill.visual.image_gen` → `skill.visual.lora_train`（云） → `skill.visual.register`（写 `center.asset`）
+
+> 动画前置视觉资产拆解见 `53-AI动画生成AgentSkills拆解方案.md`。`factory.visual` 负责角色、场景、关键帧和 reference pack，不负责镜头运动与视频合成。
 
 ## 7.3 factory.animation
-`skill.anim.storyboard` → `skill.anim.camera` → `skill.anim.keyframe` → `skill.anim.video`（云） → `skill.anim.fx` → `skill.anim.render`
+`skill.anim.storyboard` → `skill.anim.shotlist` → `skill.anim.camera` → `skill.anim.motion_prompt` → `skill.anim.video_generate`（云/闭源平台） → `skill.anim.frame_consistency` → `skill.anim.interpolate` → `skill.anim.upscale` → `skill.anim.edit_plan` → `skill.anim.render`
+
+> `factory.animation` 只处理生产镜头、动作、视频片段、后期增强和渲染。故事拆解归 `factory.novel`，角色/关键帧归 `factory.visual`，配音/字幕时间轴归 `factory.audio`。
 
 ## 7.4 factory.audio
-`skill.audio.tts` → `skill.audio.voice_clone` → `skill.audio.music` → `skill.audio.foley` → `skill.audio.subtitle`
+`skill.audio.dialogue_script` → `skill.audio.voice_casting` → `skill.audio.tts` → `skill.audio.voice_clone` → `skill.audio.music_cue` → `skill.audio.sfx` → `skill.audio.subtitle_timeline`
 
 ## 7.5 factory.publishing
-`skill.publish.format` → `skill.publish.adapt` → `skill.publish.push` → `skill.publish.report`（回传 `center.operation`）
+`skill.publish.label` → `skill.publish.format` → `skill.publish.adapt` → `skill.publish.push` → `skill.publish.report`（回传 `center.operation`）
+
+> `skill.publish.label` 负责 AIGC 标识、水印、版权声明和平台要求的可见标记。项目不建立“去水印”标准能力；涉及水印的资产必须使用授权无水印导出、重新生成或对自有资产做合规修复（见 `45` 与 `53`）。
 
 ---
 
@@ -140,7 +161,7 @@ graph.add_node("human_review", interrupt_for_review)
 |------|---------------|
 | Phase 0 | 现成工具 + 人工，**不写 skill 代码**（见 `21` §1） |
 | Phase 1 | 选定形式的 skill 落代码（如有声书：novel + audio 链） |
-| Phase 2 | 视觉/视频 skill（多数为云 GPU 任务）+ 完整 LangGraph 编排 |
+| Phase 2 | 视觉/视频 skill（本地 GPU 任务 + GPU 队列调度）+ 完整 LangGraph 编排 |
 
 > 半手工 skill 允许先以脚本实现，量大后再升级为全自动节点。
 
@@ -154,7 +175,7 @@ graph.add_node("human_review", interrupt_for_review)
 
 | 级别 | 类型 | 例子 | 处理方式 |
 |------|------|------|---------|
-| **Transient**（瞬时） | 网络/模型超时，可重试 | Ollama 响应超时、云 GPU 启动延迟 | 自动重试（见 `34` §4） |
+| **Transient**（瞬时） | 网络/模型超时，可重试 | Ollama 响应超时、GPU 队列等待超时 | 自动重试（见 `34` §4） |
 | **Soft**（软失败） | 输出不合格，需回退 | QA 冲突、合规未通过 | 路由回上游节点（`43` §3.2） |
 | **Hard**（硬失败） | 无法自动恢复 | schema 校验失败、磁盘满、DB 连接断 | 任务状态置 `failed`，触发告警，人工介入 |
 | **Poison**（毒消息） | 任务反复触发同一异常 | 某 prompt 组合必触发 OOM | 移入死信队列，告警，人工排查后删除或修复 |
@@ -221,6 +242,62 @@ task_annotations = {
 |---------|-------------|-------------|
 | LLM 推理（本地） | 3 min | 5 min |
 | LLM 推理（云 fallback） | 5 min | 10 min |
-| 云 GPU 任务（图/视频） | 30 min | 60 min |
+| 本地图像生成（ComfyUI） | 5 min | 10 min |
+| 本地视频生成（ComfyUI，独占卡） | 30 min | 60 min |
+| LoRA 训练（本地夜间） | 4 h | 8 h |
 | 数据库操作 | 30 s | 60 s |
 | 全流水线（chapter→screenplay） | 20 min | 30 min |
+
+---
+
+# 10. GPU 队列调度器（单卡 32GB 核心组件）
+
+> 本地单卡工作站的**新核心组件**（Mac+云时代不存在）：一张 32GB 卡是写作/图像/视频/LoRA/TTS 的共享瓶颈，必须集中调度。设计背景见 `32` §7，模型选型见 `33`。
+
+## 10.1 显存预算表（gpu_class → 显存与并发）
+
+| gpu_class | 典型任务 | 显存占用 | 独占锁 | 时段 |
+|-----------|---------|---------|--------|------|
+| `llm_resident` | 写作/审校 LLM（14~32B 4-bit） | 10~24GB | 否（可与小任务共存） | 白天常驻 |
+| `image` | SDXL/Flux 出图 | 8~16GB | 否（与 LLM 错峰短时占用） | 白天按需 |
+| `video_exclusive` | Wan/Hunyuan/LTX 视频生成 | 24~32GB＋ | **是（独占整卡）** | 夜间批处理 |
+| `lora_train` | LoRA 微调 | 16~24GB | **是** | 夜间/周末 |
+| `tts` | XTTS/CosyVoice | 2~6GB | 否（与视频错峰） | 与视频错峰 |
+
+## 10.2 调度规则
+
+```python
+class GpuScheduler:
+    """
+    Redis/Celery 之上的显存感知调度层。
+    所有占 GPU 的 center.model 调用必须先 acquire()。
+    """
+    TOTAL_VRAM_GB = 32
+
+    def acquire(self, gpu_class: str, run_id: str):
+        # 1. video_exclusive / lora_train 申请独占锁：
+        #    等待当前所有 GPU 任务排空 → 卸载常驻 LLM → 独占
+        # 2. image / tts：检查剩余显存预算 ≥ 需求，否则排队
+        # 3. llm_resident：白天优先常驻，夜间视频时段可被抢占卸载
+        ...
+
+    def release(self, run_id: str):
+        # 释放显存额度；若独占任务结束，按时段恢复常驻 LLM
+        ...
+```
+
+## 10.3 时段策略（对接 `32` §4.2）
+
+| 时段 | 常驻 | 允许并发 | 禁止 |
+|------|------|---------|------|
+| 白天（人机协作） | `llm_resident` | + `image`（短时）+ `tts`（短时） | `video_exclusive`（避免抢占写作） |
+| 夜间（无人值守） | `video_exclusive` 或 `lora_train`（独占） | 单任务串行 | 大 LLM 常驻 |
+| 周末（集中收尾） | 视频/音频交替 | 分阶段切换 | 同时抢卡 |
+
+## 10.4 优先级与抢占
+
+- 白天写作任务（人在环）**最高优先**，不被批处理抢占。
+- 夜间视频/LoRA 为低优先长任务，白天写作请求到来时**不抢占**（等夜间窗口）。
+- 独占任务（`video_exclusive`/`lora_train`）申请时，等待非独占任务自然排空，再卸载常驻 LLM 获取整卡。
+
+> 失败降级（换 seed → 降规格 → 首尾帧兜底）由调度器配合 §9.2 重试策略执行，见 `32` §4.4。

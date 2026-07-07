@@ -1,0 +1,8 @@
+{
+  "required": ["plot_id", "ch_no", "scenes"],
+  "properties": {
+    "plot_id": "string",
+    "ch_no": "integer",
+    "scenes": "array"
+  }
+}

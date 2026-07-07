@@ -1,0 +1,14 @@
+{
+  "run_id": "run_0001",
+  "status": "done",
+  "artifacts": {
+    "outline": "novel_outline.json",
+    "plot": "novel_plot.json",
+    "chapter": "novel_chapter.json",
+    "dialogue": "novel_dialogue.json",
+    "qa": "qa_consistency.json",
+    "export": "export/chapter_001.txt"
+  },
+  "qa_passed": true,
+  "issue_count": 0
+}

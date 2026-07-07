@@ -1,0 +1,11 @@
+{
+  "qa_passed": true,
+  "issues": [],
+  "chapter_id": "chapter.ch001",
+  "lineage": {
+    "skill": "skill.qa.consistency",
+    "model": "mock-novel-write",
+    "input_ids": [],
+    "params": {}
+  }
+}

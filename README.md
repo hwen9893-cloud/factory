@@ -2,7 +2,7 @@
 
 > 从网文到动漫的 Agent Skills 工厂｜策略文档体系
 > Version：v1.0　Last Update：2026-06
-> 平台基线：**Mac Studio（本地）+ 云 GPU（突发）**｜基座：**`center.model` 多后端（默认见 `docs/33-模型选型策略.md`）**
+> 平台基线：**本地单卡 CUDA 工作站（RTX 5090 32GB / Ubuntu，见 `docs/32`）**，全本地、单卡队列错峰｜基座：**`center.model` 多后端（默认见 `docs/33-模型选型策略.md`）**
 > 团队基线：**3 人 —— 剧情设计 / 美工设计 / 代码实现**
 
 ---
@@ -62,12 +62,13 @@ NN-中文短名.md
 | `docs/21-精益路线.md` | Active | 3 人版 Market-First 路线（Phase 0–3） |
 | `docs/22-成功标准与里程碑.md` | Active | 量化验收标准 + M1–M7 + M3.5 |
 | `docs/23-预算与资源约束.md` | Active | Capex / Opex 结构与花钱节奏 |
+| `docs/24-模块化任务实现策略.md` | Active | 模块化任务拆解、看板、DoD 与 `factory.novel` 初期框架 |
 
 ## 架构层（3x）
 | 文件 | 状态 | 说明 |
 |------|------|------|
 | `docs/31-系统架构.md` | Active | 六层架构（分层 Local First） |
-| `docs/32-硬件与部署方案.md` | Active | Mac Studio + 云 GPU 突发部署 |
+| `docs/32-硬件与部署方案.md` | Active | 本地 RTX 5090 单卡 CUDA 工作站 + GPU 队列错峰 |
 | `docs/33-模型选型策略.md` | Active | Llama3 vs 中文模型，多后端封装 |
 | `docs/34-center.model接口规范.md` | Active | 统一模型接口、profile 配置、重试策略 |
 
@@ -86,6 +87,7 @@ NN-中文短名.md
 |------|------|------|
 | `docs/51-一致性Playbook.md` | Active | Mac/云分工的一致性落地手册 |
 | `docs/52-一致性技术预研方案.md` | Active | 四维度预研与 M3.5 关卡 |
+| `docs/53-AI动画生成AgentSkills拆解方案.md` | Active | 动画生成 SOP 到 visual/animation/audio/qa/publishing skills 的拆解 |
 
 ## 代码执行层（6x）
 | 文件 | 状态 | 说明 |
@@ -105,8 +107,9 @@ NN-中文短名.md
 
 - **新成员入门**：`README` → `11` → `12` → `21` → `31`
 - **剧情**：`21` → `41` → `42` → `43` → `44` →（方法论）`49`
-- **美工**：`21` → `51` → `52` → `33`（视觉模型）
+- **美工**：`21` → `51` → `52` → `53` → `33`（视觉模型）
 - **代码**：`31` → `32` → `33` → `34` → `61` → `62` → `72`
+- **项目管理 / 排期**：`21` → `22` → `24` → `71` → `72`
 - **决策复盘**：`22` → `72` → `21`
 
 ---
