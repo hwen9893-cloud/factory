@@ -1,9 +1,0 @@
-[
-  {
-    "id": "knowledge.timeline.0001",
-    "event_name": "外门试炼开始",
-    "chapter_no": 1,
-    "participants": ["knowledge.character.0001", "knowledge.character.0002"],
-    "outcome": "待生成"
-  }
-]

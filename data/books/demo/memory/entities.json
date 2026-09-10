@@ -1,0 +1,47 @@
+{
+  "characters": {
+    "knowledge.character.0001": {
+      "id": "knowledge.character.0001",
+      "name": "陆沉",
+      "status": "alive",
+      "realm": "knowledge.realm.0001",
+      "location": "",
+      "faction": "knowledge.sect.0001",
+      "skills": [],
+      "items": [],
+      "voice_style": "短句、低声",
+      "personality": "克制、隐忍",
+      "note": "旧伤加重"
+    },
+    "knowledge.character.0002": {
+      "id": "knowledge.character.0002",
+      "name": "赵衡",
+      "status": "alive",
+      "realm": "knowledge.realm.0001",
+      "location": "",
+      "faction": "knowledge.sect.0001",
+      "skills": [],
+      "items": [],
+      "voice_style": "讥讽",
+      "personality": "傲慢",
+      "note": "当众受挫"
+    },
+    "knowledge.character.0003": {
+      "id": "knowledge.character.0003",
+      "name": "沈青禾",
+      "status": "alive",
+      "realm": "knowledge.realm.0002",
+      "location": "",
+      "faction": "knowledge.sect.0001",
+      "skills": [],
+      "items": [],
+      "voice_style": "点到为止",
+      "personality": "冷静",
+      "note": ""
+    }
+  },
+  "relationships": [],
+  "items": [],
+  "places": [],
+  "factions": []
+}

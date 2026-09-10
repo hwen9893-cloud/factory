@@ -1,0 +1,17 @@
+{
+  "volume_no": 1,
+  "title": "外门风起",
+  "theme": "资格",
+  "chapters": [
+    {
+      "ch_no": 1,
+      "title": "第1章 灵根初鸣",
+      "function": "压迫后反击",
+      "tension": "high",
+      "char_focus": [
+        "knowledge.character.0001"
+      ],
+      "ending_state": "陆沉被执事盯上"
+    }
+  ]
+}

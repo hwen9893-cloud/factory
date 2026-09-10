@@ -1,8 +1,0 @@
-{
-  "required": ["outline_id", "volume_no", "chapters"],
-  "properties": {
-    "outline_id": "string",
-    "volume_no": "integer",
-    "chapters": "array"
-  }
-}

@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.env
+config/local.yaml
+.DS_Store
+data/books/*/chapters/
+data/books/*/outline.json
+data/books/*/memory/summaries.jsonl
+data/books/usage.sqlite*

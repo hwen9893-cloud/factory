@@ -1,0 +1,115 @@
+# Novel factory defaults. Do not put API keys here.
+# Priority: this file < project config (factory.yaml / config/local.yaml / FACTORY_CONFIG)
+#          < environment variables < CLI flags.
+#
+# Offline defaults use provider: mock. Put real model ids in a project overlay, not in Python.
+
+project:
+  language: zh-CN
+  book: demo
+
+generation:
+  chapter_target_words: 5000
+  max_revision_rounds: 2
+
+models:
+  architect:
+    provider: mock
+    model: architect
+    temperature: 0.45
+    max_tokens: 4096
+    timeout_sec: 120
+    max_retries: 3
+  planner:
+    provider: mock
+    model: planner
+    temperature: 0.4
+    max_tokens: 4096
+    timeout_sec: 120
+    max_retries: 3
+  writer:
+    provider: mock
+    model: writer
+    temperature: 0.8
+    max_tokens: 4096
+    timeout_sec: 180
+    max_retries: 3
+  reviewer:
+    provider: mock
+    model: reviewer
+    temperature: 0.2
+    max_tokens: 2048
+    timeout_sec: 120
+    max_retries: 2
+
+# Named pipelines. `workflow` is the default `run` sequence.
+workflows:
+  setup:
+    - world_builder
+    - character
+    - novel_architect
+    - outline
+    - volume_planner
+  chapter:
+    - chapter_planner
+    - chapter_writer
+    - continuity
+    - reviewer
+    - revision
+    - memory
+  plan:
+    - world_builder
+    - character
+    - novel_architect
+    - outline
+    - volume_planner
+    - chapter_planner
+  write:
+    - chapter_writer
+  review:
+    - continuity
+    - reviewer
+    - revision
+    - memory
+  run:
+    - world_builder
+    - character
+    - novel_architect
+    - outline
+    - volume_planner
+    - chapter_planner
+    - chapter_writer
+    - continuity
+    - reviewer
+    - revision
+    - memory
+
+workflow:
+  - world_builder
+  - character
+  - novel_architect
+  - outline
+  - volume_planner
+  - chapter_planner
+  - chapter_writer
+  - continuity
+  - reviewer
+  - revision
+  - memory
+
+memory:
+  recent_chapters: 3
+  prev_tail_chars: 400
+  max_open_threads: 20
+  max_major_events: 40
+  max_relevant_characters: 8
+
+storage:
+  backend: json   # json | sqlite
+  data_dir: data/books
+
+# Optional USD per 1M tokens for factory stats. Unknown models show cost as —.
+# pricing:
+#   your-model-id:
+#     input: 0.15
+#     output: 0.60

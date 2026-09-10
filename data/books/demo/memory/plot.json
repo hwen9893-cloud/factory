@@ -1,0 +1,61 @@
+{
+  "major_events": [
+    {
+      "id": "knowledge.timeline.0001",
+      "event_name": "外门试炼开始",
+      "chapter_no": 1,
+      "participants": [
+        "knowledge.character.0001",
+        "knowledge.character.0002"
+      ],
+      "outcome": "待生成"
+    },
+    {
+      "id": "knowledge.timeline.0002",
+      "event_name": "演武场反击",
+      "chapter_no": 1,
+      "participants": [
+        "knowledge.character.0001",
+        "knowledge.character.0002"
+      ],
+      "outcome": "赵衡受挫，陆沉暴露剑息"
+    },
+    {
+      "event_name": "演武场反击",
+      "chapter_no": 1,
+      "participants": [
+        "knowledge.character.0001",
+        "knowledge.character.0002"
+      ],
+      "outcome": "赵衡受挫，陆沉暴露剑息"
+    },
+    {
+      "event_name": "演武场反击",
+      "chapter_no": 1,
+      "participants": [
+        "knowledge.character.0001",
+        "knowledge.character.0002"
+      ],
+      "outcome": "赵衡受挫，陆沉暴露剑息"
+    }
+  ],
+  "open_threads": [
+    {
+      "id": "thread.sword-attention",
+      "text": "执事注意到不该出现的剑息",
+      "status": "open",
+      "related_ids": [
+        "knowledge.character.0001"
+      ],
+      "chapter_no": 1
+    }
+  ],
+  "closed_threads": [],
+  "current_conflict": "外门试炼资格",
+  "current_tasks": [
+    "活过执事追查"
+  ],
+  "long_term_goals": [
+    "从不敢拔剑到当众接剑"
+  ]
+}

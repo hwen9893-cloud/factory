@@ -1,0 +1,69 @@
+{
+  "world_summary": "青岚宗外门，剑修与风系术法为主。",
+  "rules": [
+    "不得自造未登记境界",
+    "死人不得无解释现身"
+  ],
+  "protagonist": {
+    "id": "knowledge.character.0001",
+    "name": "陆沉",
+    "aliases": [
+      "阿沉"
+    ],
+    "realm": "knowledge.realm.0001",
+    "sect": "knowledge.sect.0001",
+    "personality": "克制、隐忍",
+    "voice_style": "短句、低声",
+    "status": "alive",
+    "goal": "活过外门试炼"
+  },
+  "major_characters": [
+    {
+      "id": "knowledge.character.0001",
+      "name": "陆沉",
+      "status": "alive",
+      "goal": "活过外门试炼"
+    },
+    {
+      "id": "knowledge.character.0002",
+      "name": "赵衡",
+      "status": "alive",
+      "goal": "当众踩人"
+    },
+    {
+      "id": "knowledge.character.0003",
+      "name": "沈青禾",
+      "status": "alive",
+      "goal": "观察异变"
+    }
+  ],
+  "core_setting": {
+    "realms": [
+      {
+        "id": "knowledge.realm.0001",
+        "name": "炼气期",
+        "level": 1
+      }
+    ],
+    "sects": [
+      {
+        "id": "knowledge.sect.0001",
+        "name": "青岚宗"
+      }
+    ],
+    "places": [
+      {
+        "id": "knowledge.place.0001",
+        "name": "外门演武场"
+      }
+    ]
+  },
+  "main_goals": [
+    "从不敢拔剑到当众接剑",
+    "灵根残缺的外门弟子在试炼中被迫反击。",
+    "灵根残缺少年在宗门试炼中被逼入绝境，借旧伤中残留的古剑灵息反击。"
+  ],
+  "facts": [
+    "陆沉当众使出完整青岚剑诀"
+  ]
+}

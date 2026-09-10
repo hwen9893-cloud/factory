@@ -1,0 +1,25 @@
+{
+  "plot_threads": [
+    {
+      "id": "thread.sword-attention",
+      "title": "执事注意到不该出现的剑息",
+      "setup_chapter": 1,
+      "status": "open",
+      "involved_characters": ["knowledge.character.0001"],
+      "expected_payoff": "内门追查旧伤来历",
+      "payoff_chapter": null,
+      "priority": 5
+    }
+  ],
+  "foreshadowing": [
+    {
+      "id": "fs.old-wound",
+      "clue": "旧伤中残留古剑灵息",
+      "inserted_at": 1,
+      "expected_resolution": "古剑来历揭开",
+      "resolved": false,
+      "resolution": "",
+      "related_thread_id": "thread.sword-attention"
+    }
+  ]
+}
