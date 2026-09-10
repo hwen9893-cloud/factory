@@ -1,0 +1,110 @@
+# Copy to factory.yaml (repo root) or pass --config.
+# Keys stay in .env (DASHSCOPE_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY).
+#
+# Mixed providers: do NOT set FACTORY_PROVIDER (comment it out in .env).
+# That env var stamps every catalog entry to one vendor.
+
+project:
+  language: zh-CN
+  book: demo
+
+generation:
+  chapter_target_words: 5000
+  max_revision_rounds: 2
+
+default_model: qwen_writer
+
+providers:
+  mock:
+    enabled: false
+  qwen:
+    enabled: true
+  anthropic:
+    enabled: true
+  openai:
+    enabled: true
+
+models:
+  qwen_writer:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus
+    roles: [writer]
+    temperature: 0.8
+  qwen_planner:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus
+    roles: [planner]
+    temperature: 0.3
+  claude_architect:
+    provider: anthropic
+    model: claude-sonnet-4
+    display_name: Claude Sonnet
+    roles: [architect]
+    temperature: 0.45
+  claude_writer:
+    provider: anthropic
+    model: claude-sonnet-4
+    display_name: Claude Sonnet
+    roles: [writer]
+    temperature: 0.8
+  gpt_reviewer:
+    provider: openai
+    model: gpt-4o-mini
+    display_name: GPT 4o mini
+    roles: [reviewer]
+    temperature: 0.2
+
+  # Role slots stay in sync so FACTORY_MODEL_WRITER and older configs still work.
+  architect:
+    provider: anthropic
+    model: claude-sonnet-4
+    display_name: Claude Sonnet
+    temperature: 0.45
+  planner:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus
+    temperature: 0.3
+  writer:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus
+    temperature: 0.8
+  reviewer:
+    provider: openai
+    model: gpt-4o-mini
+    display_name: GPT 4o mini
+    temperature: 0.2
+
+agents:
+  world_builder:
+    model: claude_architect
+  character:
+    model: claude_architect
+  novel_architect:
+    model: claude_architect
+  outline:
+    model: qwen_planner
+  volume_planner:
+    model: qwen_planner
+  chapter_planner:
+    model: qwen_planner
+  continuity:
+    model: gpt_reviewer
+  reviewer:
+    model: gpt_reviewer
+  memory:
+    model: gpt_reviewer
+
+# Optional: DashScope international endpoint
+# models:
+#   qwen_writer:
+#     base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+
+# Optional USD / 1M tokens for `factory stats`
+# pricing:
+#   qwen-plus:
+#     input: 0.40
+#     output: 1.20

@@ -21,12 +21,16 @@ models = [
   "anthropic>=0.34.0",
   "google-genai>=1.0.0",
 ]
+gui = [
+  "nicegui>=2.5",
+]
 test = [
   "pytest>=8.0",
 ]
 
 [project.scripts]
 factory = "factory.cli:app"
+factory-gui = "factory.gui.app:main"
 
 [tool.setuptools.packages.find]
 include = ["factory*"]

@@ -11,6 +11,7 @@ import random
 import time
 from typing import Any, Protocol
 
+from factory.events import ProgressCallback, token_event
 from factory.models.jsonutil import parse_json_object
 from factory.models.providers import MockProvider, Provider, ProviderError, RetryableError, build_provider
 from factory.models.types import (
@@ -48,6 +49,7 @@ class ModelClient:
         self.book_id = book_id
         self.last_result: GenerationResult | None = None
         self._providers: dict[str, Provider] = {}
+        self.on_progress: ProgressCallback | None = None
 
     def generate(
         self,
@@ -67,6 +69,7 @@ class ModelClient:
             max_tokens=max_tokens,
             json_mode=False,
             agent=agent,
+            on_token=self._token_sink(agent),
         )
         return result.text
 
@@ -157,6 +160,7 @@ class ModelClient:
         max_tokens: int | None,
         json_mode: bool,
         agent: str = "",
+        on_token: Any | None = None,
     ) -> GenerationResult:
         spec = self.settings.profile(profile)
         provider = self._provider(spec)
@@ -167,12 +171,21 @@ class ModelClient:
         attempts = spec.max_retries + 1
         for attempt in range(attempts):
             try:
-                result = provider.complete(
-                    messages,
-                    model=chosen_model,
-                    config=config,
-                    json_mode=json_mode,
-                )
+                if on_token:
+                    result = provider.stream(
+                        messages,
+                        model=chosen_model,
+                        config=config,
+                        json_mode=json_mode,
+                        on_token=on_token,
+                    )
+                else:
+                    result = provider.complete(
+                        messages,
+                        model=chosen_model,
+                        config=config,
+                        json_mode=json_mode,
+                    )
                 result.attempts = attempt + 1
                 result.cost_usd = estimate_cost(result.model, result.usage, self.settings.pricing)
                 self.last_result = result
@@ -275,6 +288,16 @@ class ModelClient:
             return
         delay = min(delay, 30.0) + random.uniform(0, 0.25)
         time.sleep(delay)
+
+    def _token_sink(self, agent: str):
+        if self.on_progress is None:
+            return None
+
+        def emit(chunk: str) -> None:
+            if chunk:
+                self.on_progress(token_event(chunk, agent=agent))
+
+        return emit
 
 
 def _estimate_usage(messages: list[dict[str, str]], output: str) -> Usage:

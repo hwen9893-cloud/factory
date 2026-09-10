@@ -52,12 +52,56 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(provider.name, "openrouter")
         self.assertEqual(provider.base_url, "https://openrouter.ai/api/v1")
 
+    def test_qwen_requires_key(self) -> None:
+        with patch.dict(os.environ, {"DASHSCOPE_API_KEY": "", "QWEN_API_KEY": ""}, clear=False):
+            with self.assertRaises(ProviderError) as ctx:
+                build_provider(_profile("qwen", api_key_env="DASHSCOPE_API_KEY"))
+        self.assertIn("DASHSCOPE_API_KEY", str(ctx.exception))
+
     def test_parse_fenced_json(self) -> None:
         payload = parse_json_object("```json\n{\"ok\": true}\n```")
         self.assertEqual(payload, {"ok": True})
 
     def test_mock_provider_type(self) -> None:
         self.assertIsInstance(build_provider(_profile("mock")), MockProvider)
+
+    def test_openai_stream_calls_on_token(self) -> None:
+        try:
+            import openai  # noqa: F401
+        except ImportError:
+            self.skipTest("openai sdk not installed")
+
+        class Delta:
+            def __init__(self, content: str | None) -> None:
+                self.content = content
+
+        class Choice:
+            def __init__(self, content: str | None) -> None:
+                self.delta = Delta(content)
+
+        class Chunk:
+            def __init__(self, content: str | None, model: str = "gpt-test") -> None:
+                self.choices = [Choice(content)] if content is not None else []
+                self.model = model
+                self.usage = None
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False):
+            provider = build_provider(_profile("openai", api_key_env="OPENAI_API_KEY"))
+        seen: list[str] = []
+
+        def fake_create(**kwargs):
+            self.assertTrue(kwargs.get("stream"))
+            return [Chunk("He"), Chunk("llo")]
+
+        with patch.object(provider._client.chat.completions, "create", fake_create):
+            result = provider.stream(
+                [{"role": "user", "content": "hi"}],
+                model="gpt-test",
+                config=GenerationConfig(),
+                on_token=seen.append,
+            )
+        self.assertEqual(seen, ["He", "llo"])
+        self.assertEqual(result.text, "Hello")
 
 
 if __name__ == "__main__":

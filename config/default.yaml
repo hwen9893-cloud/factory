@@ -12,10 +12,33 @@ generation:
   chapter_target_words: 5000
   max_revision_rounds: 2
 
+# Agents without an `agents:` override use this catalog key.
+default_model: writer
+
+# Vendors the GUI/CLI may list. Keys stay in .env. Disable to hide from `factory models`.
+providers:
+  mock:
+    enabled: true
+  openai:
+    enabled: true
+  openai_compat:
+    enabled: true
+  openrouter:
+    enabled: true
+  anthropic:
+    enabled: true
+  gemini:
+    enabled: true
+  qwen:
+    enabled: true
+
+# Named catalog. Role slots (architect/planner/writer/reviewer) plus optional presets.
 models:
   architect:
     provider: mock
     model: architect
+    display_name: Architect (mock)
+    roles: [architect]
     temperature: 0.45
     max_tokens: 4096
     timeout_sec: 120
@@ -23,6 +46,8 @@ models:
   planner:
     provider: mock
     model: planner
+    display_name: Planner (mock)
+    roles: [planner]
     temperature: 0.4
     max_tokens: 4096
     timeout_sec: 120
@@ -30,6 +55,8 @@ models:
   writer:
     provider: mock
     model: writer
+    display_name: Writer (mock)
+    roles: [writer]
     temperature: 0.8
     max_tokens: 4096
     timeout_sec: 180
@@ -37,10 +64,33 @@ models:
   reviewer:
     provider: mock
     model: reviewer
+    display_name: Reviewer (mock)
+    roles: [reviewer]
     temperature: 0.2
     max_tokens: 2048
     timeout_sec: 120
     max_retries: 2
+
+# Which catalog entry each agent uses. Omit an agent to inherit default_model.
+agents:
+  world_builder:
+    model: architect
+  character:
+    model: architect
+  novel_architect:
+    model: architect
+  outline:
+    model: planner
+  volume_planner:
+    model: planner
+  chapter_planner:
+    model: planner
+  continuity:
+    model: reviewer
+  reviewer:
+    model: reviewer
+  memory:
+    model: reviewer
 
 # Named pipelines. `workflow` is the default `run` sequence.
 workflows:

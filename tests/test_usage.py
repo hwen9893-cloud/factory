@@ -87,6 +87,11 @@ class UsageStoreTest(unittest.TestCase):
             self.assertNotIn(b"sk-", blob)
             self.assertNotIn(b"API_KEY", blob)
 
+            latest = store.recent(book_id="demo", limit=5)
+            self.assertEqual(len(latest), 2)
+            self.assertEqual(latest[0].agent, "reviewer")
+            self.assertNotIn("sk-", latest[0].model)
+
     def test_empty_store(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             store = UsageStore(Path(raw) / "usage.sqlite")

@@ -1,10 +1,11 @@
-"""CLI: factory init / status / architect / plan-* / write / review / revise / continue.
+"""CLI: collect args, call FactoryService, print results.
 
 Usage after `pip install -e .`:
 
     factory init my_novel
     factory architect
     factory continue
+    factory models
     factory stats
     factory demo
 """
@@ -12,24 +13,30 @@ Usage after `pip install -e .`:
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Annotated, Any, Iterable, Optional
+from typing import Annotated, Any, Optional
 
 import typer
 
 from factory.demo import run_offline_demo
-from factory.models.usage import UsageStore, format_report
+from factory.events import (
+    ERROR,
+    STAGE_COMPLETED,
+    STAGE_STARTED,
+    TOKEN,
+    WARNING,
+    WORKFLOW_COMPLETED,
+    WORKFLOW_STARTED,
+    WorkflowEvent,
+    agent_for_stage,
+)
+from factory.models.usage import format_report
+from factory.models.registry import format_registry
 from factory.pipeline.models import PipelineError
-from factory.schema.store import SchemaStore
+from factory.service import FactoryService
 from factory.settings import Settings, load_settings
-from factory.storage import BookRepository
-from factory.workflow import SimpleWorkflow
 
 DEFAULT_SEED = "灵根残缺少年在宗门试炼中被逼入绝境，借旧伤中残留的古剑灵息反击。"
-
-ARCHITECT_STEPS = ("world_builder", "character", "novel_architect", "outline")
-CHAPTER_STEPS = ("chapter_planner", "chapter_writer", "continuity", "reviewer", "revision", "memory")
 
 app = typer.Typer(
     name="factory",
@@ -84,45 +91,38 @@ def init_cmd(
     seed: str = typer.Option(DEFAULT_SEED, "--seed"),
 ) -> None:
     """Create a book directory and select it."""
-    _quiet_logs()
-    settings = _load_settings()
-    repo = BookRepository(settings.data_dir)
-    try:
-        repo.init_book(name, title=title or name, genre=genre, style=style, story_seed=seed)
-    except FileExistsError as exc:
-        _fail(str(exc))
-    repo.set_current_book(name)
+    service = _service()
+    path = _try(
+        lambda: service.init_book(name, title=title, genre=genre, style=style, seed=seed)
+    )
     typer.echo(f"created  {name}")
-    typer.echo(f"path     {repo.book_dir(name)}")
+    typer.echo(f"path     {path}")
     typer.echo("next     factory architect")
 
 
 @app.command("status")
 def status_cmd(book: BookOpt = None) -> None:
     """Show current book progress."""
-    settings, repo, book_id = _boot(book)
-    wf = SimpleWorkflow(settings, book_id)
-    ctx = wf.context
-    outlined = ctx.outlined_chapters()
-    done = sum(1 for ch_no in outlined if repo.load_final(book_id, ch_no))
-    nxt = _next_chapter(repo, ctx)
-    last = repo.max_final_chapter(book_id)
+    service, book_id = _boot(book)
+    info = _try(lambda: service.book_status(book_id))
     typer.echo(book_id)
-    typer.echo(f"  {ctx.title}  {ctx.genre}")
-    if outlined:
-        typer.echo(f"  chapter  {done}/{len(outlined)}   next {nxt if nxt is not None else 'done'}")
+    typer.echo(f"  {info.title}  {info.genre}")
+    if info.outlined:
+        nxt = info.next_chapter if info.next_chapter is not None else "done"
+        typer.echo(f"  chapter  {info.completed}/{info.outlined}   next {nxt}")
     else:
-        typer.echo(f"  chapter  {last or '—'}   next {nxt or 1}   (no outline)")
-    typer.echo(f"  volume   {ctx.current_volume}")
-    typer.echo(f"  outline  {'yes' if ctx.outline else 'no'}")
-    typer.echo(f"  last     {f'ch{last:03d}' if last else '—'}")
+        last = info.last_final or "—"
+        typer.echo(f"  chapter  {last}   next {info.next_chapter or 1}   (no outline)")
+    typer.echo(f"  volume   {info.volume}")
+    typer.echo(f"  outline  {'yes' if info.has_outline else 'no'}")
+    typer.echo(f"  last     {f'ch{info.last_final:03d}' if info.last_final else '—'}")
 
 
 @app.command("architect")
 def architect_cmd(book: BookOpt = None) -> None:
     """World, characters, story spine, and book outline."""
-    settings, repo, book_id = _boot(book)
-    result = _run(settings, book_id, ARCHITECT_STEPS)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.architect(book_id))
     title = (result.get("outline") or result.get("architecture") or {}).get("title") or book_id
     typer.echo(f"architect  {book_id}  {title}")
     typer.echo("next        factory plan-volume 1   or   factory continue")
@@ -134,8 +134,8 @@ def plan_volume_cmd(
     book: BookOpt = None,
 ) -> None:
     """Plan one volume from the outline."""
-    settings, repo, book_id = _boot(book)
-    result = _run(settings, book_id, ("volume_planner",), volume_no=volume)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.plan_volume(book_id, volume))
     plan = result.get("volume_plan") or {}
     chapters = plan.get("chapters") or []
     typer.echo(f"volume {volume}  {plan.get('title') or ''}  {len(chapters)} chapters")
@@ -147,9 +147,8 @@ def plan_chapter_cmd(
     book: BookOpt = None,
 ) -> None:
     """Build the chapter task (scene cards)."""
-    settings, repo, book_id = _boot(book)
-    _ensure_volume(settings, book_id, chapter)
-    result = _run(settings, book_id, ("chapter_planner",), ch_no=chapter)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.plan(book_id, chapter))
     plan = result.get("chapter_plan") or {}
     scenes = plan.get("scenes") or []
     typer.echo(f"ch {chapter}  {plan.get('title') or ''}  {len(scenes)} scenes")
@@ -161,8 +160,8 @@ def write_cmd(
     book: BookOpt = None,
 ) -> None:
     """Write chapter prose from the chapter plan."""
-    settings, repo, book_id = _boot(book)
-    result = _run(settings, book_id, ("chapter_writer",), ch_no=chapter)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.generate(book_id, chapter))
     typer.echo(_chapter_line(result, prefix="wrote"))
 
 
@@ -172,8 +171,8 @@ def review_cmd(
     book: BookOpt = None,
 ) -> None:
     """Continuity check + quality review. Does not rewrite."""
-    settings, repo, book_id = _boot(book)
-    result = _run(settings, book_id, ("continuity", "reviewer"), ch_no=chapter)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.review(book_id, chapter))
     continuity = result.get("continuity") or {}
     review = result.get("review") or {}
     typer.echo(_chapter_line(result, prefix="review"))
@@ -193,71 +192,62 @@ def revise_cmd(
     book: BookOpt = None,
 ) -> None:
     """Rewrite the draft from the latest review / continuity notes."""
-    settings, repo, book_id = _boot(book)
-    result = _run(settings, book_id, ("revision",), ch_no=chapter)
+    service, book_id = _boot(book)
+    result = _try(lambda: service.revise(book_id, chapter))
     typer.echo(_chapter_line(result, prefix="revised"))
 
 
 @app.command("continue")
 def continue_cmd(book: BookOpt = None) -> None:
     """Detect the next chapter and run plan → write → check → revise → save → memory."""
-    settings, repo, book_id = _boot(book)
-    wf = SimpleWorkflow(settings, book_id)
-    if not wf.context.outline:
+    service, book_id = _boot(book)
+    status = _try(lambda: service.book_status(book_id))
+    if not status.has_outline:
         _fail("no outline. run: factory architect")
-    ch_no = _next_chapter(repo, wf.context)
-    if ch_no is None:
-        outlined = wf.context.outlined_chapters()
-        typer.echo(f"{book_id}  done  {len(outlined)}/{len(outlined)} chapters")
+    if status.next_chapter is None:
+        typer.echo(f"{book_id}  done  {status.completed}/{status.outlined} chapters")
         raise typer.Exit(0)
-    volume_no = wf.context.volume_for_chapter(ch_no)
-    if not repo.load_volume_plan(book_id, volume_no):
-        typer.echo(f"{book_id}  planning volume {volume_no}")
-        wf.context.current_volume = volume_no
-        wf.context.current_chapter = ch_no
-        wf.context.save_meta(wf.repo)
-        _invoke(wf, ("volume_planner",), volume_no=volume_no, ch_no=ch_no)
-    pipe = repo.load_pipeline_state(book_id, ch_no) or {}
-    wf.resume = pipe.get("status") in {"failed", "running"}
-    wf.context.current_chapter = ch_no
-    wf.context.current_volume = volume_no
-    wf.context.volume_plan = repo.load_volume_plan(book_id, volume_no)
-    wf.context.save_meta(wf.repo)
-    typer.echo(f"{book_id}  chapter {ch_no}{'  resume' if wf.resume else ''}")
-    result = _invoke(wf, CHAPTER_STEPS, ch_no=ch_no, volume_no=volume_no)
+    typer.echo(f"{book_id}  chapter {status.next_chapter}{'  resume' if status.next_resumable else ''}")
+    result = _try(
+        lambda: service.produce_chapter(
+            book_id,
+            status.next_chapter,
+            resume=status.next_resumable,
+        )
+    )
     typer.echo(_chapter_line(result, prefix="done"))
-    status = (result.get("pipeline") or {}).get("status")
-    if status:
-        typer.echo(f"  pipeline  {status}  revisions {(result.get('pipeline') or {}).get('revision_attempts', 0)}")
+    pipe = result.get("pipeline") or {}
+    if pipe.get("status"):
+        typer.echo(f"  pipeline  {pipe.get('status')}  revisions {pipe.get('revision_attempts', 0)}")
 
 
 @memory_app.command("show")
 def memory_show(book: BookOpt = None) -> None:
     """Print canon facts, open threads, and recent chapter summaries."""
-    settings, repo, book_id = _boot(book)
-    wf = SimpleWorkflow(settings, book_id)
-    memory = wf.memory_store.load()
-    chapters = wf.memory_store.load_chapter_memories(last_n=5)
+    service, book_id = _boot(book)
+    memory = _try(lambda: service.memory_overview(book_id))
     typer.echo(book_id)
-    typer.echo(f"  conflict  {memory.plot.current_conflict or '—'}")
-    typer.echo(f"  facts     {len(memory.canon.facts)}")
-    if memory.plot.open_threads:
+    typer.echo(f"  conflict  {memory.get('conflict') or '—'}")
+    typer.echo(f"  facts     {len(memory.get('facts') or [])}")
+    threads = memory.get("threads") or []
+    if threads:
         typer.echo("  threads")
-        for thread in memory.plot.open_threads[:12]:
-            typer.echo(f"    open   {thread.id}  {thread.text}")
+        for thread in threads[:12]:
+            typer.echo(f"    open   {thread.get('id') or '—'}  {thread.get('text') or ''}")
     else:
         typer.echo("  threads   —")
-    if chapters:
+    recent = memory.get("recent") or []
+    if recent:
         typer.echo("  recent")
-        for item in chapters:
-            typer.echo(f"    ch{item.ch_no:03d}  {item.summary or '—'}")
+        for item in recent:
+            typer.echo(f"    ch{int(item.get('ch_no') or 0):03d}  {item.get('summary') or '—'}")
 
 
 @character_app.command("list")
 def character_list(book: BookOpt = None) -> None:
     """List character cards."""
-    settings, repo, book_id = _boot(book)
-    rows = repo.load_characters(book_id)
+    service, book_id = _boot(book)
+    rows = _try(lambda: service.list_characters(book_id))
     if not rows:
         typer.echo(f"{book_id}  (no characters)")
         return
@@ -273,17 +263,19 @@ def character_list(book: BookOpt = None) -> None:
 @plot_app.command("list")
 def plot_list(book: BookOpt = None) -> None:
     """List plot threads and foreshadowing."""
-    settings, repo, book_id = _boot(book)
-    schema = SchemaStore(repo, book_id).load()
+    service, book_id = _boot(book)
+    payload = _try(lambda: service.list_plot(book_id))
     typer.echo(book_id)
-    if not schema.plot_threads and not schema.foreshadowing:
+    threads = payload.get("threads") or []
+    clues = payload.get("foreshadowing") or []
+    if not threads and not clues:
         typer.echo("  (no plot threads)")
         return
-    for thread in schema.plot_threads:
-        typer.echo(f"  {thread.status:10}  {thread.id or '—'}  {thread.title}")
-    for clue in schema.foreshadowing:
-        mark = "resolved" if clue.resolved else "open"
-        typer.echo(f"  {mark:10}  {clue.id or '—'}  {clue.clue}")
+    for thread in threads:
+        typer.echo(f"  {str(thread.get('status') or ''):10}  {thread.get('id') or '—'}  {thread.get('title') or ''}")
+    for clue in clues:
+        mark = "resolved" if clue.get("resolved") else "open"
+        typer.echo(f"  {mark:10}  {clue.get('id') or '—'}  {clue.get('clue') or ''}")
 
 
 @app.command("stats")
@@ -291,10 +283,32 @@ def stats_cmd(
     book: Optional[str] = typer.Option(None, "--book", "-b", help="Only this book (default: all books)"),
 ) -> None:
     """Show today's model calls, tokens, cost, and per-agent / per-model usage."""
+    service = _service()
+    typer.echo(format_report(_try(lambda: service.usage_summary(book_id=book))))
+
+
+@app.command("models")
+def models_cmd() -> None:
+    """List providers, named models, and agent assignments from config."""
+    service = _service()
+    typer.echo(_try(lambda: format_registry(service.registry)))
+
+
+@app.command("studio")
+def studio_cmd(
+    book: BookOpt = None,
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8080, "--port"),
+) -> None:
+    """Open Novel Factory GUI. Needs the gui extra: pip install -e '.[gui]'."""
     _quiet_logs()
-    settings = _load_settings()
-    store = UsageStore(settings.data_dir / "usage.sqlite")
-    typer.echo(format_report(store.summarize(since=store.today_start(), book_id=book)))
+    try:
+        import nicegui  # noqa: F401
+    except ImportError:
+        _fail('Chapter Studio needs NiceGUI. pip install -e ".[gui]"')
+    from factory.gui.app import run_studio
+
+    run_studio(book=book, host=host, port=port, settings=_load_settings())
 
 
 @app.command("demo")
@@ -346,88 +360,61 @@ def _load_settings() -> Settings:
     return load_settings(_cli_config, overrides=_cli_overrides or None)
 
 
-def _boot(book: str | None) -> tuple[Settings, BookRepository, str]:
+def _service() -> FactoryService:
     _quiet_logs()
-    settings = _load_settings()
-    repo = BookRepository(settings.data_dir)
-    book_id = _resolve_book(book, settings, repo)
-    if not repo.exists(book_id):
-        _fail(f"book not found: {book_id}. factory init {book_id}")
-    repo.set_current_book(book_id)
-    return settings, repo, book_id
+    return FactoryService(_load_settings(), on_progress=print_progress)
 
 
-def _resolve_book(explicit: str | None, settings: Settings, repo: BookRepository) -> str:
-    for candidate in (explicit, os.environ.get("FACTORY_BOOK"), repo.current_book(), settings.default_book):
-        if candidate:
-            return candidate
-    _fail("no book selected. factory init <name>")
-    raise AssertionError
+def print_progress(event: WorkflowEvent) -> None:
+    """CLI renderer. Token deltas stay off stdout."""
+    if event.type in {TOKEN, WORKFLOW_STARTED, WORKFLOW_COMPLETED}:
+        return
+    if event.type == STAGE_STARTED:
+        print(f"→ {_cli_stage_text(event.stage)}", flush=True)
+    elif event.type == STAGE_COMPLETED:
+        print("  ok", flush=True)
+    elif event.type == ERROR:
+        print(f"  error: {event.message}", flush=True)
+    elif event.type == WARNING and event.message:
+        print(event.message, flush=True)
+    elif event.message:
+        print(event.message, flush=True)
 
 
-def _run(
-    settings: Settings,
-    book_id: str,
-    steps: Iterable[str],
-    *,
-    ch_no: int | None = None,
-    volume_no: int | None = None,
-    resume: bool = False,
-) -> dict[str, Any]:
-    wf = SimpleWorkflow(settings, book_id)
-    wf.resume = resume
-    return _invoke(wf, steps, ch_no=ch_no, volume_no=volume_no)
+_CLI_STAGE_TEXT = {
+    "chapter_planner": "Planning",
+    "chapter_writer": "Writing",
+    "continuity_check": "Checking continuity",
+    "continuity": "Checking continuity",
+    "quality_review": "Reviewing",
+    "reviewer": "Reviewing",
+    "revision": "Revising",
+    "memory_update": "Updating memory",
+    "memory": "Updating memory",
+    "volume_planner": "Planning volume",
+    "save": "Saving",
+    "persist": "Saving",
+}
 
 
-def _invoke(
-    wf: SimpleWorkflow,
-    steps: Iterable[str],
-    *,
-    ch_no: int | None = None,
-    volume_no: int | None = None,
-) -> dict[str, Any]:
-    if ch_no:
-        wf.context.current_chapter = ch_no
-    if volume_no:
-        wf.context.current_volume = volume_no
-        loaded = wf.repo.load_volume_plan(wf.book_id, volume_no)
-        if loaded:
-            wf.context.volume_plan = loaded
-    wf.context.save_meta(wf.repo)
-    payload = {
-        "story_seed": wf.context.story_seed,
-        "ch_no": ch_no or wf.context.current_chapter,
-        "volume_no": volume_no or wf.context.current_volume,
-    }
+def _cli_stage_text(stage: str) -> str:
+    return _CLI_STAGE_TEXT.get(stage) or _CLI_STAGE_TEXT.get(agent_for_stage(stage)) or stage
+
+
+def _boot(book: str | None) -> tuple[FactoryService, str]:
+    service = _service()
+    return service, _try(lambda: service.require_book(book))
+
+
+def _try(fn):
     try:
-        return wf.run(steps, payload)
+        return fn()
     except PipelineError as exc:
         _fail(f"failed at {exc.stage}: {exc}")
         raise AssertionError
-    except (KeyError, ValueError) as exc:
+    except (LookupError, ValueError, FileExistsError, FileNotFoundError, KeyError) as exc:
         _fail(str(exc))
         raise AssertionError
-
-
-def _ensure_volume(settings: Settings, book_id: str, ch_no: int) -> None:
-    wf = SimpleWorkflow(settings, book_id)
-    if not wf.context.outline:
-        _fail("no outline. run: factory architect")
-    volume_no = wf.context.volume_for_chapter(ch_no)
-    if wf.repo.load_volume_plan(book_id, volume_no):
-        return
-    typer.echo(f"planning volume {volume_no}")
-    _invoke(wf, ("volume_planner",), volume_no=volume_no, ch_no=ch_no)
-
-
-def _next_chapter(repo: BookRepository, ctx: Any) -> int | None:
-    outlined = ctx.outlined_chapters()
-    for ch_no in outlined:
-        if not repo.load_final(ctx.book_id, ch_no):
-            return ch_no
-    if outlined:
-        return None
-    return (repo.max_final_chapter(ctx.book_id) or 0) + 1
 
 
 def _chapter_line(result: dict[str, Any], *, prefix: str) -> str:

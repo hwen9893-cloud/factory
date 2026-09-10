@@ -7,7 +7,9 @@ dist/
 build/
 .pytest_cache/
 .mypy_cache/
+# Secrets — never commit. Copy .env.example to .env locally.
 .env
+.env.local
 config/local.yaml
 .DS_Store
 data/books/*/chapters/

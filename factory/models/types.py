@@ -5,6 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+__all__ = [
+    "GenerationConfig",
+    "GenerationResult",
+    "ModelProfile",
+    "PROFILE_ALIASES",
+    "Usage",
+    "estimate_cost",
+    "resolve_profile_name",
+    "usage_from_counts",
+]
+
 
 @dataclass(frozen=True)
 class GenerationConfig:
@@ -38,7 +49,7 @@ class GenerationResult:
 
 @dataclass(frozen=True)
 class ModelProfile:
-    """Named slot such as planner / writer / reviewer."""
+    """Named catalog entry (role slot or preset such as qwen_writer)."""
 
     name: str
     provider: str
@@ -50,27 +61,14 @@ class ModelProfile:
     api_key_env: str = ""
     max_retries: int = 3
     retry_backoff_sec: float = 1.0
+    display_name: str = ""
+    roles: tuple[str, ...] = ()
 
 
 PROFILE_ALIASES = {
     "plan": "planner",
     "write": "writer",
     "review": "reviewer",
-}
-
-DEFAULT_KEY_ENV = {
-    "openai": "OPENAI_API_KEY",
-    "openai_compat": "OPENAI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "mock": "",
-}
-
-DEFAULT_BASE_URL = {
-    "openai": "https://api.openai.com/v1",
-    "openai_compat": "https://api.openai.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
 }
 
 

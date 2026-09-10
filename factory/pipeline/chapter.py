@@ -8,6 +8,7 @@ from typing import Any, Callable, Iterable
 from factory.agents import AGENT_CLASSES
 from factory.agents.base import Runtime
 from factory.context import StoryContext
+from factory.events import ProgressCallback, error_event, discard_progress, stage_completed, stage_started
 from factory.storage import BookRepository
 from factory.pipeline.models import (
     ChapterDraft,
@@ -60,11 +61,13 @@ class ChapterProductionPipeline:
         context: StoryContext,
         book_id: str,
         max_revisions: int = 3,
+        on_progress: ProgressCallback | None = None,
     ) -> None:
         self.runtime = runtime
         self.repo = repo
         self.context = context
         self.max_revisions = int(max_revisions)
+        self.on_progress = on_progress or discard_progress
         self.state = PipelineState(book_id=book_id, ch_no=context.current_chapter, max_revisions=self.max_revisions)
         self.wanted: set[str] = set(STAGE_ORDER)
         self._resume_skip = False
@@ -145,8 +148,8 @@ class ChapterProductionPipeline:
             if stage != self.state.next_stage:
                 return
             self._resume_skip = False
-        self._emit(f"→ {stage}")
         self.state.current_stage = stage
+        self._emit(f"→ {stage}", stage=stage, status="start")
         self.state.log.append(StageEvent(stage=stage, status="start"))
         self._checkpoint()
         try:
@@ -159,12 +162,12 @@ class ChapterProductionPipeline:
             self.state.next_stage = stage
             self.state.log.append(StageEvent(stage=stage, status="error", detail=str(exc)))
             self._checkpoint()
-            self._emit(f"  error: {exc}")
+            self._emit(str(exc), stage=stage, status="error")
             raise PipelineError(stage, str(exc)) from exc
         self.state.log.append(StageEvent(stage=stage, status="ok"))
         if not hold_resume:
             self.state.next_stage = self._next_after(stage)
-        self._emit("  ok")
+        self._emit("  ok", stage=stage, status="ok")
         self._checkpoint()
 
     def _next_after(self, stage: str) -> str:
@@ -355,9 +358,16 @@ class ChapterProductionPipeline:
         }
         return payload
 
-    def _emit(self, message: str) -> None:
-        print(message, flush=True)
-        logger.info(message)
+    def _emit(self, message: str, *, stage: str = "", status: str = "info") -> None:
+        current = stage or self.state.current_stage
+        if status == "start":
+            self.on_progress(stage_started(current))
+        elif status == "ok":
+            self.on_progress(stage_completed(current))
+        elif status == "error":
+            self.on_progress(error_event(message, stage=current))
+        if status != "info" or message.startswith("==") or message.startswith("  "):
+            logger.info(message)
 
 
 def expand_stages(agents: Iterable[str] | None) -> set[str]:

@@ -1,9 +1,9 @@
-"""CLI → SimpleWorkflow.run → setup agents and/or ChapterProductionPipeline.
+"""Application service → SimpleWorkflow.run → setup agents and/or ChapterProductionPipeline.
 
 Call chain:
 
-  factory.cli  (typer)
-    → load_settings()                         # default.yaml < project < env < CLI
+  factory.cli / factory.gui
+    → FactoryService                     # collect params live in CLI/GUI; business flow lives here
     → SimpleWorkflow(settings, book_id)
         constructs: BookRepository, PromptManager, ModelClient, StoryContext, memory, Runtime, UsageStore
     → workflow.run(step names)
@@ -21,8 +21,19 @@ from typing import Any, Iterable
 
 from factory.agents import AGENT_CLASSES, CHAPTER_AGENTS, Runtime
 from factory.context import StoryContext
+from factory.events import (
+    WORKFLOW_COMPLETED,
+    WORKFLOW_STARTED,
+    ProgressCallback,
+    WorkflowEvent,
+    error_event,
+    discard_progress,
+    stage_completed,
+    stage_started,
+)
 from factory.memory import MemoryRetriever, MemoryUpdater, build_store
 from factory.models.client import ModelClient
+from factory.models.registry import ModelRegistry
 from factory.models.usage import UsageStore
 from factory.pipeline.chapter import ChapterProductionPipeline
 from factory.prompts import PromptManager
@@ -33,16 +44,24 @@ from factory.storage import BookRepository
 class SimpleWorkflow:
     """Run a named sequence of agents against one book."""
 
-    def __init__(self, settings: Settings, book_id: str) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        book_id: str,
+        *,
+        on_progress: ProgressCallback | None = None,
+    ) -> None:
         self.settings = settings
         self.book_id = book_id
+        self.on_progress = on_progress or discard_progress
         self.repo = BookRepository(settings.data_dir)
         self.prompts = PromptManager()
         self.models = ModelClient(
             settings,
-            usage_store=UsageStore(settings.data_dir / "usage.sqlite"),
+            usage_store=UsageStore.for_data_dir(settings.data_dir),
             book_id=book_id,
         )
+        self.models.on_progress = self.on_progress
         self.context = StoryContext.load(
             self.repo,
             book_id,
@@ -75,6 +94,7 @@ class SimpleWorkflow:
             memory_store=self.memory_store,
             memory_retriever=self.memory_retriever,
             memory_updater=self.memory_updater,
+            registry=ModelRegistry.from_settings(settings),
         )
         self.resume = False
         self.start_at: str | None = None
@@ -86,27 +106,42 @@ class SimpleWorkflow:
         names = list(steps) if steps is not None else list(self.settings.workflow)
         setup = [name for name in names if name not in CHAPTER_AGENTS]
         chapter = [name for name in names if name in CHAPTER_AGENTS]
-        for name in setup:
-            agent_cls = AGENT_CLASSES.get(name)
-            if agent_cls is None:
-                raise KeyError(f"unknown workflow step: {name}")
-            print(f"→ {name}", flush=True)
-            payload.update(agent_cls(self.runtime).run(payload))
-            print("  ok", flush=True)
-        if chapter:
-            pipeline = ChapterProductionPipeline(
-                self.runtime,
-                repo=self.repo,
-                context=self.context,
-                book_id=self.book_id,
-                max_revisions=self.settings.max_revisions,
-            )
-            payload.update(
-                pipeline.run(
-                    ch_no=int(payload.get("ch_no") or self.context.current_chapter),
-                    resume=self.resume,
-                    start_at=self.start_at,
-                    agents=chapter,
+        self.on_progress(WorkflowEvent(type=WORKFLOW_STARTED, stage="workflow"))
+        try:
+            for name in setup:
+                agent_cls = AGENT_CLASSES.get(name)
+                if agent_cls is None:
+                    raise KeyError(f"unknown workflow step: {name}")
+                self._emit(name, "start")
+                payload.update(agent_cls(self.runtime).run(payload))
+                self._emit(name, "ok")
+            if chapter:
+                pipeline = ChapterProductionPipeline(
+                    self.runtime,
+                    repo=self.repo,
+                    context=self.context,
+                    book_id=self.book_id,
+                    max_revisions=self.settings.max_revisions,
+                    on_progress=self.on_progress,
                 )
-            )
+                payload.update(
+                    pipeline.run(
+                        ch_no=int(payload.get("ch_no") or self.context.current_chapter),
+                        resume=self.resume,
+                        start_at=self.start_at,
+                        agents=chapter,
+                    )
+                )
+        except Exception as exc:
+            self.on_progress(error_event(str(exc), stage="workflow"))
+            raise
+        self.on_progress(WorkflowEvent(type=WORKFLOW_COMPLETED, stage="workflow"))
         return payload
+
+    def _emit(self, stage: str, status: str, message: str = "") -> None:
+        if status == "start":
+            self.on_progress(stage_started(stage, message=message))
+        elif status == "ok":
+            self.on_progress(stage_completed(stage, message=message))
+        else:
+            self.on_progress(error_event(message, stage=stage))

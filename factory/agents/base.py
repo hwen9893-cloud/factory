@@ -12,6 +12,7 @@ from factory.memory.retriever import MemoryRetriever
 from factory.memory.store import MemoryStore
 from factory.memory.updater import MemoryUpdater
 from factory.models.client import ModelClient
+from factory.models.registry import ModelRegistry
 from factory.prompts import PromptManager
 from factory.storage import BookRepository
 
@@ -35,6 +36,7 @@ class Runtime:
     memory_store: MemoryStore
     memory_retriever: MemoryRetriever
     memory_updater: MemoryUpdater
+    registry: ModelRegistry | None = None
 
 
 class BaseAgent(ABC):
@@ -58,6 +60,13 @@ class BaseAgent(ABC):
         self.memory_store = runtime.memory_store
         self.retriever = runtime.memory_retriever
         self.updater = runtime.memory_updater
+        self.registry = runtime.registry
+
+    def profile_name(self) -> str:
+        """Catalog key for this agent. YAML `agents:` wins over the class default."""
+        if self.registry is not None:
+            return self.registry.assigned_model_name(self.name, default=self.model)
+        return self.model
 
     def run(self, state: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = dict(state or {})
@@ -96,7 +105,7 @@ class BaseAgent(ABC):
         return self.models.generate_structured(
             self.messages(user=rendered["user"], system=rendered["system"]),
             schema or self.output_schema or {"type": "object"},
-            profile=self.model,
+            profile=self.profile_name(),
             purpose=purpose,
             temperature=self.temperature,
             agent=self.name,
@@ -106,7 +115,7 @@ class BaseAgent(ABC):
         rendered = self.render_prompt(**(extra_vars or {}))
         text = self.models.generate(
             self.messages(user=rendered["user"], system=rendered["system"]),
-            profile=self.model,
+            profile=self.profile_name(),
             temperature=self.temperature,
             agent=self.name,
         ).strip()
@@ -151,7 +160,7 @@ class BaseAgent(ABC):
         return loaded["title"], loaded["body"]
 
     def lineage(self, state: dict[str, Any]) -> dict[str, Any]:
-        spec = self.models.settings.profile(self.model)
+        spec = self.models.settings.profile(self.profile_name())
         result = self.models.last_result
         payload = {
             "agent": self.name,

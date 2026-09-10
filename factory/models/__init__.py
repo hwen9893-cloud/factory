@@ -2,14 +2,17 @@
 
 from factory.models.client import ModelClient
 from factory.models.providers import MockModelProvider, MockProvider, Provider, ProviderError, RetryableError, build_provider
+from factory.models.registry import ModelRegistry, ProviderInfo
 from factory.models.types import GenerationConfig, GenerationResult, ModelProfile, Usage
 
 __all__ = [
     "ModelClient",
+    "ModelRegistry",
     "MockModelProvider",
     "MockProvider",
     "Provider",
     "ProviderError",
+    "ProviderInfo",
     "RetryableError",
     "build_provider",
     "GenerationConfig",

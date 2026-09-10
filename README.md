@@ -17,14 +17,15 @@
 7. [模型配置](#7-模型配置)
 8. [创建小说](#8-创建小说)
 9. [生成章节](#9-生成章节)
-10. [Agent 工作流](#10-agent-工作流)
-11. [Story Memory](#11-story-memory)
-12. [数据保存位置](#12-数据保存位置)
-13. [如何添加新 Agent](#13-如何添加新-agent)
-14. [如何添加新模型 Provider](#14-如何添加新模型-provider)
-15. [如何添加新 Prompt](#15-如何添加新-prompt)
-16. [测试](#16-测试)
-17. [Roadmap](#17-roadmap)
+10. [GUI](#10-gui)
+11. [Agent 工作流](#11-agent-工作流)
+12. [Story Memory](#12-story-memory)
+13. [数据保存位置](#13-数据保存位置)
+14. [如何添加新 Agent](#14-如何添加新-agent)
+15. [如何添加新模型 Provider](#15-如何添加新模型-provider)
+16. [如何添加新 Prompt](#16-如何添加新-prompt)
+17. [测试](#17-测试)
+18. [Roadmap](#18-roadmap)
 
 ---
 
@@ -44,7 +45,7 @@ factory --help
 python -m factory --help
 ```
 
-不包含：RAG、向量库、Web UI、Agent 互调、LangGraph、动画/视觉管线。
+不包含：RAG、向量库、Agent 互调、LangGraph、动画/视觉管线。可选 GUI 走同一套 Core（`FactoryService` → Workflow），删掉 GUI 后 CLI 仍可独立运行。
 
 ---
 
@@ -72,8 +73,11 @@ config/default.yaml  <  项目 YAML  <  环境变量  <  CLI
 ## 3. 架构图
 
 ```text
-CLI (typer)
-  factory init | architect | continue | write | review | ...
+CLI (typer) / GUI
+  factory init | architect | continue | write | studio | ...
+        │
+        ▼
+FactoryService                 # CLI 与 GUI 都走这里；不 import Agent / Provider / SQL
         │
         ▼
 load_settings()          default.yaml < project < env < CLI
@@ -99,7 +103,8 @@ SimpleWorkflow(settings, book_id)
 BaseAgent.ask_json / ask_text
   PromptManager.render(name.md)
   ModelClient.generate[_structured]
-  Provider.complete          mock | openai | openrouter | anthropic | gemini
+  Provider.complete          mock | openai | openrouter | anthropic | gemini | qwen
+  ModelRegistry              providers / models / agents（配置查找，不调用 API）
         │
         ▼
 落盘: BookRepository + SchemaStore + MemoryStore
@@ -108,8 +113,9 @@ BaseAgent.ask_json / ask_text
 
 ```mermaid
 flowchart TD
-  CLI[factory CLI] --> Settings[load_settings]
-  Settings --> WF[SimpleWorkflow]
+  CLI[factory CLI] --> SVC[FactoryService]
+  GUI[NiceGUI] --> SVC
+  SVC --> WF[SimpleWorkflow]
   WF --> Setup[setup agents]
   WF --> Pipe[ChapterProductionPipeline]
   Setup --> Agent[BaseAgent]
@@ -129,18 +135,24 @@ flowchart TD
 ```text
 .
 ├── config/
-│   └── default.yaml          # 出厂配置（mock）
+│   ├── default.yaml          # 出厂配置（mock）
+│   └── qwen.example.yaml     # Qwen / 混用厂商示例，复制为 factory.yaml
 ├── data/books/               # 书库，与代码分离
 │   ├── usage.sqlite          # 模型调用统计
-│   └── {book_id}/            # 见第 12 节
+│   └── {book_id}/            # 见第 13 节
 ├── docs/                     # 策略文档，不参与运行
 ├── factory/                  # Python 包
 │   ├── cli.py
+│   ├── service.py            # GUI/CLI 共用的 Application Service
 │   ├── settings.py
 │   ├── workflow.py
 │   ├── context.py
+│   ├── events.py             # generic WorkflowEvent（callback，无 GUI 文案）
+│   ├── gui/                  # 可选 GUI（NiceGUI）；Core 不 import
+│   │     dashboard / studio / bible / outline / memory / models / settings
+│   │     presentation/  adapters.py（页面拼装，不在 Core）
 │   ├── agents/               # BaseAgent 子类；互不 import
-│   ├── models/               # ModelClient + providers + usage
+│   ├── models/               # ModelClient + specs + providers + usage
 │   ├── prompts/              # Markdown 模板 + PromptManager
 │   ├── pipeline/             # 单章流水线与 Pydantic 契约
 │   ├── memory/               # 分层记忆
@@ -176,6 +188,13 @@ pip install -e ".[models]"
 
 然后在 `.env` 填对应 key，并在 YAML 里改 `models.*.provider` / `models.*.model`。
 
+GUI（可选，同一套 FactoryService）：
+
+```bash
+pip install -e ".[gui]"
+factory studio
+```
+
 跑测试：
 
 ```bash
@@ -186,7 +205,7 @@ pip install -e ".[test]"
 
 ## 6. 环境变量
 
-复制 `.env.example` 为 `.env`。不要把 key 写进 YAML。
+复制 `.env.example` 为 `.env`。不要把 key 写进 YAML、`novel.json`、或 Git。`.env` 已在 `.gitignore`。GUI 的 Models / API Settings 只检测这些名字是否存在，默认不显示、不写入密钥。
 
 | 变量 | 作用 |
 |------|------|
@@ -194,7 +213,8 @@ pip install -e ".[test]"
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `ANTHROPIC_API_KEY` | Anthropic |
 | `GEMINI_API_KEY` | Gemini（空则尝试 `GOOGLE_API_KEY`） |
-| `FACTORY_PROVIDER` | 覆盖**所有** profile 的 provider。开发时保持 `mock` |
+| `DASHSCOPE_API_KEY` | 通义千问 / Qwen（DashScope；空则尝试 `QWEN_API_KEY`） |
+| `FACTORY_PROVIDER` | 覆盖**所有** profile 的 provider。开发时保持 `mock`。混用厂商时请注释掉 |
 | `FACTORY_BOOK` | 默认书 id |
 | `FACTORY_DATA_DIR` | 书库目录，默认 `data/books` |
 | `FACTORY_CONFIG` | 项目 YAML 路径 |
@@ -218,7 +238,91 @@ factory --config ./factory.yaml status
 
 ## 7. 模型配置
 
-四个命名槽位，Agent 通过 `model = "architect"|"planner"|"writer"|"reviewer"` 选用。
+GUI 和 CLI **不要硬编码** Qwen / GPT / Claude / Gemini。可用厂商和模型从 YAML 读，经 `ModelRegistry` 查找。真正的 API 调用仍是 `ModelClient` → `Provider`。
+
+```text
+providers: + models: + default_model + agents:
+        ↓
+  ModelRegistry.list_models() / assigned_model_name()
+        ↓
+  Agent.profile_name() → ModelClient.generate[_structured] → Provider.complete
+```
+
+两级映射：
+
+1. `default_model` — 全局默认 catalog key（例如 `qwen_writer`）
+2. `agents.<name>.model` — 单个 Agent 覆盖；省略则继承 Default
+
+GUI 下拉显示 `display_name`（Qwen Plus / Claude Sonnet / GPT 4o mini），保存的是 profile ID。不要写 `if selected == "Qwen"`.
+
+普通 UI 只展示 Agent、Provider、Model。`base_url`、`api_key_env` 名、timeout 在 Models → Advanced。密钥值不出现在页面上。
+
+查看当前配置（不打 API）：
+
+```bash
+factory models
+```
+
+### Catalog 与 Agent 映射
+
+`models:` 是具名目录（可以有很多预设，不只四个槽位）。`agents:` 指定每个 Agent 用哪一条。`providers:` 控制 GUI/CLI 是否展示该厂商。
+
+```yaml
+default_model: qwen_writer
+
+providers:
+  qwen:
+    enabled: true
+  anthropic:
+    enabled: true
+  openai:
+    enabled: true
+  mock:
+    enabled: false
+
+models:
+  qwen_writer:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus
+    roles: [writer]
+    temperature: 0.8
+  claude_architect:
+    provider: anthropic
+    model: claude-sonnet-4
+    display_name: Claude Sonnet
+    roles: [architect]
+    temperature: 0.45
+  gpt_reviewer:
+    provider: openai
+    model: gpt-4o-mini
+    display_name: GPT 4o mini
+    roles: [reviewer]
+    temperature: 0.2
+
+agents:
+  world_builder:
+    model: claude_architect
+  reviewer:
+    model: gpt_reviewer
+```
+
+Writer / Revision 未出现在 `agents:` 里时继承 `default_model`。
+
+`roles` 标记一条 catalog 适合哪些 Agent。GUI 用它过滤下拉框；缺省时该条目对所有 Agent 可见。
+
+GUI 选择写入 `config/local.yaml`（或 `FACTORY_CONFIG`），只存 profile ID：
+
+```yaml
+default_model: qwen_writer
+agents:
+  world_builder:
+    model: claude_architect
+  reviewer:
+    model: gpt_reviewer
+```
+
+四个角色槽位仍然可用（也是 Agent 类上的默认 `model`）：
 
 | 槽位 | Agent |
 |------|--------|
@@ -227,52 +331,78 @@ factory --config ./factory.yaml status
 | `writer` | `chapter_writer`, `revision` |
 | `reviewer` | `continuity`, `reviewer`, `memory` |
 
-出厂 `config/default.yaml` 全是 mock。接真实模型时新建 `factory.yaml`（不要改 Python）：
+出厂 `config/default.yaml` 全是 mock。接真实模型时复制 `config/qwen.example.yaml` 为 `factory.yaml`，或自己写 overlay（不要改 Python）。
+
+完整混用示例见 `config/qwen.example.yaml`。最小写法也可以只改四个槽位：
 
 ```yaml
-project:
-  language: zh-CN
-  book: my_novel
-
-generation:
-  chapter_target_words: 5000
-  max_revision_rounds: 2
-
 models:
   architect:
-    provider: openrouter
-    model: anthropic/claude-sonnet-4
-    temperature: 0.45
-  planner:
-    provider: openai
-    model: gpt-4o-mini
-    temperature: 0.3
-  writer:
     provider: anthropic
     model: claude-sonnet-4
+    temperature: 0.45
+  planner:
+    provider: qwen
+    model: qwen-plus
+    temperature: 0.3
+  writer:
+    provider: qwen
+    model: qwen-plus
     temperature: 0.8
   reviewer:
     provider: openai
     model: gpt-4o-mini
     temperature: 0.2
-
-memory:
-  recent_chapters: 3
-
-storage:
-  backend: json          # json | sqlite
-  data_dir: data/books
-
-# 可选：USD / 1M tokens，供 factory stats 估费
-# pricing:
-#   gpt-4o-mini:
-#     input: 0.15
-#     output: 0.60
 ```
 
-已实现的 provider 名：`mock`、`openai`、`openai_compat`、`openrouter`、`anthropic`、`gemini`。
+已实现的 provider 名：`mock`、`openai`、`openai_compat`、`openrouter`、`anthropic`、`gemini`、`qwen`。
 
 `api_key_env` 可省略，按 provider 使用上表默认环境变量名。
+
+Python 侧（GUI 用这个，不要写死厂商名）：
+
+```python
+from factory.models.registry import ModelRegistry
+from factory.settings import load_settings
+
+registry = ModelRegistry.from_settings(load_settings())
+registry.list_providers()
+registry.list_models()
+registry.assigned_model_name("chapter_writer")
+registry.get_model("qwen_writer")
+registry.get_provider("qwen")
+```
+
+### 通义千问 / Qwen
+
+`provider: qwen` 与 OpenAI / Anthropic / Gemini / OpenRouter 同级。Workflow 与 Agent 不识别模型名。
+
+底层走阿里云 DashScope 的 **OpenAI 兼容** Chat Completions（`https://dashscope.aliyuncs.com/compatible-mode/v1`），复用 `openai` SDK，不引入 dashscope 专用包。retry / JSON 修复 / usage 仍在 `ModelClient`。
+
+1. `pip install -e ".[models]"`
+2. `.env` 填写 `DASHSCOPE_API_KEY`（或备用 `QWEN_API_KEY`）
+3. 把 `config/qwen.example.yaml` 复制为仓库根目录 `factory.yaml`，或 `factory --config config/qwen.example.yaml …`
+4. **混用多个厂商时注释掉 `.env` 里的 `FACTORY_PROVIDER`**，否则会把所有槽位 stamp 成同一个 provider
+
+只把写作槽位切到 Qwen：
+
+```yaml
+models:
+  writer:
+    provider: qwen
+    model: qwen-plus
+    temperature: 0.8
+```
+
+国际站把 `base_url` 改成 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`。
+
+切换模型 id 不要改 Python：改 YAML 的 `models.*.model`，或设 `FACTORY_MODEL_WRITER=qwen-max` 等环境变量。临时把全书切到 Qwen：
+
+```bash
+factory --provider qwen continue
+```
+
+Writer / Revision 的正文走 `Provider.stream()`（OpenAI 兼容含 Qwen、Anthropic、Gemini、mock 分块）。JSON Agent 仍用 `complete()`。
 
 ---
 
@@ -314,6 +444,8 @@ factory plot list
 
 ## 9. 生成章节
 
+CLI 与 Chapter Studio 都调用 `FactoryService` 的同名操作：`plan` / `generate` / `review` / `revise`。Studio 按按钮拆开跑；`factory continue` 调用 `produce_chapter()`，内部仍是同一条流水线（plan → write → continuity → review → revise → save → memory）。
+
 一条命令走完整章流水线（缺分卷计划会先 `plan-volume`）：
 
 ```bash
@@ -335,6 +467,7 @@ factory revise 1          # 只按最近审稿改一稿
 
 ```bash
 factory memory show
+factory models            # 配置里的 providers / 具名模型 / agent 映射
 factory stats             # 今日调用次数 / tokens / 估费 / 按 agent、model
 factory stats --book my_novel
 factory demo --out /tmp/factory-demo   # 离线 mock 冒烟
@@ -344,7 +477,58 @@ factory demo --out /tmp/factory-demo   # 离线 mock 冒烟
 
 ---
 
-## 10. Agent 工作流
+## 10. GUI
+
+Novel Factory 的操作界面。CLI 与 GUI 都只调用 `FactoryService`，再进入 Workflow → Agents → ModelClient。不直连厂商 SDK，也不读 SQL。没有第二套 Agent / Memory / Model / Workflow。
+
+```bash
+pip install -e ".[gui]"
+factory studio --book demo
+# 或 factory-gui --book demo
+```
+
+默认打开当前书（`.current` / `FACTORY_BOOK` / `project.book`）。顶栏 7 页：
+
+| 页面 | 路径 | 数据 | 动作 |
+|------|------|------|------|
+| Dashboard | `/` | meta、字数、开放线索、最近调用 | 继续下一章 → `Service.continue_next` |
+| Chapter Studio | `/studio` | 章节正文 + Inspector | Plan / Generate / Review / Revise / Accept |
+| Story Bible | `/bible` | `knowledge/*`（SchemaStore） | 列表+详情，可手工保存 |
+| Outline | `/outline` | outline / volume plan / chapter plan | 树 + 预览 |
+| Memory | `/memory` | `memory/*` 分层 | 只读 |
+| Models | `/models` | ModelRegistry + API 状态 | 切换 Default / 角色槽位；Test Connection |
+| Settings | `/settings` | `generation.*` / `memory.*` / 存储后端 | 写入 `config/local.yaml`，不写 API Key |
+
+### Chapter Studio
+
+三栏：
+
+| 区域 | 内容 |
+|------|------|
+| 左 Novel Navigator | Novel → Volume → Chapter，选择、新建、状态 |
+| 中 Chapter Editor | 标题、大面积正文、字数、版本；Save / 继续生成 |
+| 右 AI Inspector | Plan / Context / Review / Continuity / Memory |
+
+顶栏：Writer Model 下拉来自 `ModelRegistry.list_models()`（GUI 按 `roles` 过滤），值为 catalog profile ID（例如 `qwen_writer`），不是厂商名。
+
+Target 覆盖本章 `chapter_target_words`（仅本次运行）。
+
+执行时状态行与步骤清单由 GUI 自己映射 Core 事件：`workflow_started` / `stage_started` / `token` / `stage_completed` / `error` / `workflow_completed`。例如 `stage="chapter_writer"` → 状态行 “Writing”，步进器圆点（`✓` / `●` / `○`）在 `gui/presentation/progress.py`。这是进程内 callback，没有 Kafka / Redis / Celery。
+
+Writer / Revision 走 `Provider.stream()` → `ModelClient` → `WorkflowEvent(type="token")` → 编辑器追加正文。Provider 若无流式实现，则一次回全文。
+
+### Models / API Settings
+
+- API：Qwen / OpenAI / Anthropic / Gemini / OpenRouter 显示 Configured 或 Missing（只看环境变量是否非空）。Mock 不需要 key。
+- **Test Connection** 经 `FactoryService.test_connection()` → `ModelClient` → Provider，GUI 不直连 SDK。缺 key 时提示环境变量**名**，不回显密钥。
+- Assignments：Global Default + Architect / Planner / Writer / Reviewer 覆盖。
+- 第一阶段不在 GUI 里写入 API Key。以后若支持，必须走安全配置（系统钥匙串等），仍然禁止写入 YAML / JSON / Git / 普通日志。
+
+删掉 `factory/gui/` 不影响 CLI。
+
+---
+
+## 11. Agent 工作流
 
 ### Setup（`factory architect` + `plan-volume`）
 
@@ -384,7 +568,7 @@ BaseAgent.ask_json / ask_text
 
 ---
 
-## 11. Story Memory
+## 12. Story Memory
 
 写章节时不会加载历史正文全文。
 
@@ -406,7 +590,7 @@ BaseAgent.ask_json / ask_text
 
 ---
 
-## 12. 数据保存位置
+## 13. 数据保存位置
 
 根目录：`storage.data_dir`（默认 `data/books`）。
 
@@ -444,14 +628,14 @@ data/books/
 
 ---
 
-## 13. 如何添加新 Agent
+## 14. 如何添加新 Agent
 
 1. 在 `factory/agents/` 新增类，继承 `BaseAgent`。
 2. 设置 `name`、`model`（四个槽位之一）、`prompt_name`、`required_outputs`；JSON 步再设 `output_schema`。
 3. 实现 `execute(self, state) -> dict`。只通过 `self.ask_json` / `self.ask_text` 调模型，不要 import 其它 Agent，不要 import 厂商 SDK。
 4. 在 `factory/agents/__init__.py` 的 `AGENT_CLASSES` 注册。若属于单章流水线，同时加入 `CHAPTER_AGENTS`。
 5. 需要进默认顺序时，改 `config/default.yaml` 的 `workflow` / `workflows.*`。
-6. 补对应 `factory/prompts/{prompt_name}.md`（见第 15 节）。
+6. 补对应 `factory/prompts/{prompt_name}.md`（见第 16 节）。
 7. 加一个离线测试：用 `MockModelProvider`，不要打真实 API。
 
 最小骨架：
@@ -471,22 +655,28 @@ class MyAgent(BaseAgent):
 
 ---
 
-## 14. 如何添加新模型 Provider
+## 15. 如何添加新模型 Provider
 
-SDK 只能出现在 `factory/models/providers.py`。
+厂商元数据集中在 `factory/models/specs.py`。SDK 只能出现在 `factory/models/providers.py`。
 
-1. 继承 `Provider`，实现 `complete(messages, *, model, config, json_mode) -> GenerationResult`。超时、429、5xx 抛 `RetryableError`，其它抛 `ProviderError`。不要在 Provider 里重试（`ModelClient` 会重试）。
-2. 从环境变量读 key，不要把 key 写入 `GenerationResult` 或 usage 日志。
-3. 在 `build_provider()` 按 `profile.provider` 分支构造。
-4. 如需默认 key 名 / base URL，写入 `factory/models/types.py` 的 `DEFAULT_KEY_ENV`、`DEFAULT_BASE_URL`。
-5. YAML 里把某个槽位的 `provider` 改成新名字。
-6. 测试用 `MockModelProvider` 或假 key；单元测试禁止真实 HTTP。
+**OpenAI-compatible 厂商（DeepSeek / Kimi / GLM）** — 通常只改一处：
 
-`complete` 必须填 `text`、`model`、`provider`，尽量填 `usage` 与 `latency_ms`。
+1. 在 `PROVIDERS` 里加一条 `ProviderSpec`：`id`、`display_name`、`env_keys`、`base_url`、`ping_model`，`backend="openai_compat"`。
+2. YAML 里把某个槽位的 `provider` 改成新 `id`。需要隐藏时在 `providers:` 里设 `enabled: false`。
+
+**独立 SDK 厂商** — 再加 class：
+
+1. 继承 `Provider`，实现 `complete(...)`。超时、429、5xx 抛 `RetryableError`，其它抛 `ProviderError`。不要在 Provider 里重试。
+2. 在 `ProviderSpec.backend` 写一个新 kind，并在 `build_provider()` 增加对应分支。
+3. 从环境变量读 key，不要把 key 写入 `GenerationResult` 或 usage 日志。
+
+测试用 `MockProvider` 或假 key；单元测试禁止真实 HTTP。`complete` 必须填 `text`、`model`、`provider`，尽量填 `usage` 与 `latency_ms`。
+
+不要把 UI icon / CSS / 下拉颜色放进 `ProviderSpec`。GUI 可自行映射 `display_name`。
 
 ---
 
-## 15. 如何添加新 Prompt
+## 16. 如何添加新 Prompt
 
 1. 在 `factory/prompts/` 新增 `{name}.md`，文件名等于 Agent 的 `prompt_name`。
 2. 使用这六个一级标题（缺一不可，测试会查）：
@@ -520,7 +710,7 @@ SDK 只能出现在 `factory/models/providers.py`。
 
 ---
 
-## 16. 测试
+## 17. 测试
 
 全部离线。不要在普通单测里打真实模型。
 
@@ -557,9 +747,9 @@ install_mock(workflow.models, mock)
 
 ---
 
-## 17. Roadmap
+## 18. Roadmap
 
-已有：mock 全流程、Typer CLI、YAML 配置、分层 memory、JSON/SQLite 存储、用量统计、pytest 离线测试。
+已有：mock 全流程、Typer CLI、YAML 配置、分层 memory、JSON/SQLite 存储、用量统计、pytest 离线测试、Qwen Provider + Model Registry、GUI（Dashboard / Studio / Bible / Outline / Memory / Models / Settings）、WorkflowEvent + Writer streaming。
 
 近期（仍限制在单机写作管线）：
 
@@ -571,7 +761,6 @@ install_mock(workflow.models, mock)
 明确不做（除非产品范围改口）：
 
 - RAG / 向量库
-- Web UI
 - Agent 互调或多智能体自治
 - LangGraph 一类编排框架
 - 动画、立绘、TTS 管线（见 `docs/`，与本仓库运行时无关）

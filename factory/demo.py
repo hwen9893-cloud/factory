@@ -7,9 +7,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from factory.service import FactoryService
 from factory.settings import load_settings
-from factory.storage import BookRepository
-from factory.workflow import SimpleWorkflow
 
 BOOK_ID = "demo"
 TITLE = "残灵古剑"
@@ -48,12 +47,13 @@ def run_offline_demo(data_dir: Path) -> DemoReport:
     """Init a book and run the full mock workflow under data_dir."""
     data_dir.mkdir(parents=True, exist_ok=True)
     settings = replace(load_settings(overrides={"provider": "mock"}), data_dir=data_dir)
-    repo = BookRepository(data_dir)
-    book_dir = repo.book_dir(BOOK_ID)
+    service = FactoryService(settings)
+    book_dir = service.repo.book_dir(BOOK_ID)
     if book_dir.exists():
         shutil.rmtree(book_dir)
-    repo.init_book(BOOK_ID, title=TITLE, genre=GENRE, style=STYLE, story_seed=SEED)
-    result = SimpleWorkflow(settings, BOOK_ID).run()
+    service.init_book(BOOK_ID, title=TITLE, genre=GENRE, style=STYLE, seed=SEED)
+    service.architect(BOOK_ID)
+    result = service.continue_next(BOOK_ID)
     missing = tuple(rel for rel in REQUIRED if not (book_dir / rel).exists())
     chapter = book_dir / "chapters" / "ch001" / "final.md"
     body = chapter.read_text(encoding="utf-8") if chapter.exists() else ""

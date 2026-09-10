@@ -1,0 +1,37 @@
+---
+description: Novel Factory Domain / Application / Presentation split for all new work
+alwaysApply: true
+---
+
+# Novel Factory layers
+
+Before writing new code, state the layer. If it is Presentation, do not modify Core.
+
+## DOMAIN
+
+Novels, chapters, characters, models, memory, providers, workflow events as facts.
+
+May enter Core (this package except `gui/`).
+
+## APPLICATION
+
+Generate / edit a chapter, load a book, assign a model, ping a provider, run a workflow.
+
+May enter `FactoryService` / `Workflow` / pipeline. Return business DTOs (`BookStatus`, `ChapterResult`, `ProviderStatus`, `WorkflowEvent`).
+
+## PRESENTATION
+
+Dropdowns, cards, tabs, badges, steppers, dashboards, filters, display names (`Planning`, `Configured`, `Inherit Default`, `✓●○`).
+
+Must stay in `gui/` (`presentation/`, pages, adapters). CLI copy belongs in `cli.print_progress`, not Core.
+
+Forbidden in FactoryService, ModelRegistry, events.py, Agent, Workflow:
+
+- `get_xxx_page()` / `get_xxx_board()` / `get_xxx_dropdown()`
+- `ModelRegistry.xxx_options()`
+- `WorkflowEvent.track_xxx` or stepper glyphs
+- GUI-only DTO fields (`label` for widgets, card/panel/tab/badge types)
+
+Exception: the concept is a real CLI + GUI + Web business fact, not a screen.
+
+One Core, two interfaces. Deleting `gui/` must leave CLI/Core working.

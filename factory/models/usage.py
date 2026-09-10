@@ -110,9 +110,51 @@ class UsageStore:
             by_model=by_model,
         )
 
+    def recent(self, *, book_id: str | None = None, limit: int = 5) -> tuple[UsageRecord, ...]:
+        """Latest calls. Metadata only — no prompts, bodies, or keys."""
+        where = "1=1"
+        params: list[Any] = []
+        if book_id:
+            where = "book_id = ?"
+            params.append(book_id)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT timestamp, agent, provider, model,
+                       input_tokens, output_tokens, total_tokens,
+                       latency, success, retry_count, estimated_cost, book_id
+                FROM calls
+                WHERE {where}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                [*params, int(limit)],
+            ).fetchall()
+        return tuple(
+            UsageRecord(
+                timestamp=str(row[0] or ""),
+                agent=str(row[1] or ""),
+                provider=str(row[2] or ""),
+                model=str(row[3] or ""),
+                input_tokens=int(row[4] or 0),
+                output_tokens=int(row[5] or 0),
+                total_tokens=int(row[6] or 0),
+                latency=float(row[7] or 0),
+                success=bool(row[8]),
+                retry_count=int(row[9] or 0),
+                estimated_cost=None if row[10] is None else float(row[10]),
+                book_id=str(row[11] or ""),
+            )
+            for row in rows
+        )
+
     def today_start(self) -> str:
         now = datetime.now().astimezone()
         return now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+
+    @classmethod
+    def for_data_dir(cls, data_dir: Path) -> "UsageStore":
+        return cls(data_dir / "usage.sqlite")
 
     def _init(self) -> None:
         with self._connect() as conn:

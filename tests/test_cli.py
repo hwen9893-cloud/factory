@@ -95,6 +95,30 @@ class CliTest(unittest.TestCase):
             blob = (tmp / "usage.sqlite").read_bytes()
             self.assertNotIn("灵根残缺少年".encode(), blob)
 
+    def test_models_lists_catalog(self) -> None:
+        buf = io.StringIO()
+        with patch("sys.stdout", buf):
+            self.assertEqual(main(["models"]), 0)
+        out = buf.getvalue()
+        self.assertIn("providers", out)
+        self.assertIn("qwen", out)
+        self.assertIn("models", out)
+        self.assertIn("writer", out)
+        self.assertIn("agents", out)
+        self.assertIn("chapter_writer", out)
+
+    def test_cli_does_not_own_workflow(self) -> None:
+        import inspect
+
+        import factory.cli as cli
+
+        source = inspect.getsource(cli)
+        self.assertIn("FactoryService", source)
+        self.assertNotIn("SimpleWorkflow", source)
+        self.assertNotIn("BookRepository", source)
+        self.assertNotIn("SchemaStore", source)
+        self.assertNotIn("wf.run", source)
+
 
 if __name__ == "__main__":
     unittest.main()

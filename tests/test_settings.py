@@ -13,6 +13,7 @@ from factory.settings import discover_project_config, load_settings
 
 def _isolate_env(**extra: str):
     wiped = {key: "" for key in os.environ if key.startswith("FACTORY_")}
+    wiped.setdefault("FACTORY_PROVIDER", "")
     wiped.update(extra)
     return patch.dict(os.environ, wiped, clear=False)
 
@@ -37,6 +38,15 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.memory_backend, "json")
         self.assertEqual(settings.profiles["writer"].model, "writer")
         self.assertEqual(settings.profiles["writer"].provider, "mock")
+        self.assertEqual(settings.profiles["writer"].display_name, "Writer (mock)")
+        self.assertEqual(settings.profiles["writer"].roles, ("writer",))
+        self.assertEqual(settings.agent_models["chapter_writer"], "writer")
+        self.assertEqual(settings.agent_models["revision"], "writer")
+        self.assertEqual(settings.default_model, "writer")
+        self.assertNotIn("chapter_writer", settings.agent_overrides)
+        self.assertIn("reviewer", settings.agent_overrides)
+        self.assertIn("qwen", settings.providers)
+        self.assertTrue(settings.providers["qwen"].enabled)
 
     def test_env_overrides_provider(self) -> None:
         with patch("factory.settings.discover_project_config", return_value=None), _isolate_env(FACTORY_PROVIDER="openai"):
@@ -109,6 +119,41 @@ class SettingsTest(unittest.TestCase):
             profiles={"planner": ModelProfile("planner", "mock", "mock-plan")},
         )
         self.assertEqual(settings.profile("architect").name, "planner")
+
+    def test_mixed_providers_per_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "factory.yaml"
+            path.write_text(
+                "models:\n"
+                "  architect:\n    provider: anthropic\n    model: claude-sonnet-4\n"
+                "  planner:\n    provider: qwen\n    model: qwen-plus\n    temperature: 0.3\n"
+                "  writer:\n    provider: qwen\n    model: qwen-plus\n    temperature: 0.8\n"
+                "  reviewer:\n    provider: openai\n    model: gpt-4o-mini\n",
+                encoding="utf-8",
+            )
+            with _isolate_env():
+                settings = load_settings(path)
+        self.assertEqual(settings.profiles["architect"].provider, "anthropic")
+        self.assertEqual(settings.profiles["architect"].api_key_env, "ANTHROPIC_API_KEY")
+        self.assertEqual(settings.profiles["planner"].provider, "qwen")
+        self.assertEqual(settings.profiles["planner"].model, "qwen-plus")
+        self.assertEqual(settings.profiles["planner"].temperature, 0.3)
+        self.assertEqual(settings.profiles["planner"].api_key_env, "DASHSCOPE_API_KEY")
+        self.assertEqual(settings.profiles["writer"].provider, "qwen")
+        self.assertEqual(settings.profiles["writer"].temperature, 0.8)
+        self.assertEqual(settings.profiles["writer"].api_key_env, "DASHSCOPE_API_KEY")
+        self.assertEqual(settings.profiles["reviewer"].provider, "openai")
+        self.assertEqual(settings.profiles["reviewer"].api_key_env, "OPENAI_API_KEY")
+
+    def test_stamp_qwen_sets_dashscope_key_env(self) -> None:
+        with patch("factory.settings.discover_project_config", return_value=None), _isolate_env(
+            FACTORY_PROVIDER="qwen"
+        ):
+            settings = load_settings()
+        self.assertEqual(settings.provider, "qwen")
+        self.assertEqual(settings.profiles["writer"].provider, "qwen")
+        self.assertEqual(settings.profiles["architect"].provider, "qwen")
+        self.assertEqual(settings.profiles["writer"].api_key_env, "DASHSCOPE_API_KEY")
 
     def test_discover_explicit_path_wins(self) -> None:
         path = Path("/tmp/does-not-need-to-exist.yaml")
