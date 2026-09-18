@@ -214,14 +214,13 @@ pip install -e ".[test]"
 
 ## 6. 环境变量
 
-复制 `.env.example` 为 `.env`。不要把 key 写进 YAML、`novel.json`、或 Git。`.env` 已在 `.gitignore`。GUI 的 Models / API Settings 只检测这些名字是否存在，默认不显示、不写入密钥。
+源码运行时可复制 `.env.example` 为 `.env`。不要把 key 写进 YAML、`novel.json` 或 Git。`.env` 已在 `.gitignore`。Windows 桌面版可以把 Qwen Key 安全保存到 Windows 凭据管理器；界面不会回显密钥值。
+
+> 当前对外可用并经过项目验证的在线模型 API 只有 **通义千问 Qwen（阿里云 DashScope）**。
+> 其他 Provider 接口属于源码中的预留能力，不作为当前 Windows 版本的安装配置项。
 
 | 变量 | 作用 |
 |------|------|
-| `OPENAI_API_KEY` | OpenAI |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `ANTHROPIC_API_KEY` | Anthropic |
-| `GEMINI_API_KEY` | Gemini（空则尝试 `GOOGLE_API_KEY`） |
 | `DASHSCOPE_API_KEY` | 通义千问 / Qwen（DashScope；空则尝试 `QWEN_API_KEY`） |
 | `FACTORY_PROVIDER` | 覆盖**所有** profile 的 provider。开发时保持 `mock`。混用厂商时请注释掉 |
 | `FACTORY_BOOK` | 默认书 id |
@@ -246,6 +245,8 @@ factory --config ./factory.yaml status
 ---
 
 ## 7. 模型配置
+
+当前 Windows 发行版请统一使用 Qwen。普通用户按照[Windows 桌面版](#19-windows-桌面版)中的步骤配置即可，不需要配置 OpenAI、Claude 或 Gemini。
 
 GUI 和 CLI **不要硬编码** Qwen / GPT / Claude / Gemini。可用厂商和模型从 YAML 读，经 `ModelRegistry` 查找。真正的 API 调用仍是 `ModelClient` → `Provider`。
 
@@ -778,13 +779,241 @@ install_mock(workflow.models, mock)
 
 ## 19. Windows 桌面版
 
-Windows 10/11 x64 发布版使用 NiceGUI native + PyInstaller onedir + Inno Setup，普通用户
-不需要安装 Python。构建机在 PowerShell 中运行：
+支持 Windows 10/11 64 位。普通用户不需要安装 Python、Git、Node.js 或本地大模型。
+
+当前 Windows 版本只需要配置 **Qwen API**。不要配置 OpenAI、Claude、Gemini 或其他 API。
+
+### 19.1 使用安装包安装
+
+获取以下安装包：
+
+```text
+StoryFactory-Setup-<版本号>.exe
+```
+
+安装步骤：
+
+1. 双击 `StoryFactory-Setup-<版本号>.exe`。
+2. 如果 Windows SmartScreen 提示“Windows 已保护你的电脑”，测试版本可点击“更多信息”→“仍要运行”。正式发布版本应使用代码签名。
+3. 同意安装器的管理员权限提示。程序默认安装到：
+
+   ```text
+   C:\Program Files\StoryFactory
+   ```
+
+4. 根据需要勾选“创建桌面快捷方式”。
+5. 安装完成后，从桌面或开始菜单启动 **Story Factory**。
+
+如果启动时提示缺少 WebView2，请安装 Microsoft Edge WebView2 Runtime。标准 Windows 10/11 通常已经包含该组件。
+
+### 19.2 使用免安装版
+
+如果拿到的是 portable 压缩包：
+
+1. 将压缩包完整解压到一个普通目录，例如：
+
+   ```text
+   D:\StoryFactory
+   ```
+
+2. 保留 `StoryFactory` 目录中的全部文件，不要只复制 `StoryFactory.exe`。
+3. 双击：
+
+   ```text
+   StoryFactory\StoryFactory.exe
+   ```
+
+免安装版和安装版使用相同的用户配置及项目目录。
+
+### 19.3 获取 Qwen API Key
+
+1. 登录阿里云百炼 / Model Studio 控制台。
+2. 开通 DashScope 模型服务。
+3. 创建一个 API Key。
+4. 复制并妥善保存该 Key，不要提交到 GitHub，也不要写入小说项目文件。
+
+国内 DashScope 服务地址由程序默认配置为：
+
+```text
+https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+### 19.4 在桌面程序中保存 Qwen API Key
+
+1. 第一次启动 Story Factory。
+2. 左侧进入“AI 模型”。
+3. 找到 `Qwen`。
+4. 点击钥匙图标。
+5. 粘贴 API Key，然后点击“安全保存”。
+6. 点击 Qwen 行中的“测试连接”。
+7. 显示“连接正常”后，关闭 Story Factory。
+
+API Key 会保存到 **Windows Credential Manager（Windows 凭据管理器）**，不会写入 YAML、JSON、小说项目或日志。
+
+### 19.5 将所有创作环节设置为 Qwen
+
+第一次启动后，打开以下文件：
+
+```text
+%LOCALAPPDATA%\StoryFactory\config\local.yaml
+```
+
+可以在文件资源管理器地址栏直接粘贴上述路径。将文件内容替换为：
+
+```yaml
+providers:
+  mock:
+    enabled: false
+  qwen:
+    enabled: true
+
+default_model: writer
+
+models:
+  architect:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus（架构）
+    temperature: 0.45
+  planner:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus（规划）
+    temperature: 0.35
+  writer:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus（正文）
+    temperature: 0.8
+  reviewer:
+    provider: qwen
+    model: qwen-plus
+    display_name: Qwen Plus（审阅）
+    temperature: 0.2
+```
+
+保存文件并重新启动 Story Factory。进入“AI 模型”确认默认模型和各创作环节均显示 Qwen。
+
+如需使用其他 Qwen 型号，可以把 `qwen-plus` 改为有权限调用的模型 ID，例如 `qwen-max`。建议首次安装先使用 `qwen-plus`。
+
+### 19.6 API Key 的环境变量备用方案
+
+如果无法使用 Windows 凭据管理器，可以使用环境变量。PowerShell 当前窗口临时设置：
+
+```powershell
+$env:DASHSCOPE_API_KEY = "你的 API Key"
+```
+
+写入当前 Windows 用户环境变量：
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "DASHSCOPE_API_KEY",
+    "你的 API Key",
+    "User"
+)
+```
+
+设置后需要完全退出并重新启动 Story Factory。不要把真实 Key 写进 README、截图、聊天记录或 Git 仓库。
+
+### 19.7 首次使用
+
+完成 Qwen 配置后：
+
+1. 启动 Story Factory。
+2. 创建小说项目，或进入“框架导入”上传网络小说框架 Markdown。
+3. 先执行框架预览和校验，再确认导入。
+4. 进入创作工作台规划并生成章节。
+5. 项目会默认保存在：
+
+   ```text
+   %LOCALAPPDATA%\StoryFactory\projects
+   ```
+
+其他运行数据位置：
+
+```text
+%LOCALAPPDATA%\StoryFactory\
+├── config\       # local.yaml 与桌面设置
+├── logs\         # 运行日志
+├── projects\     # 小说项目
+├── database\     # 数据库
+├── cache\
+└── runtime\
+```
+
+卸载程序默认只删除程序文件，不删除这里的小说项目和配置。
+
+### 19.8 常见问题
+
+连接测试提示 `missing API key`：
+
+- 确认已在 Qwen 行点击“安全保存”。
+- 或确认用户环境变量名为 `DASHSCOPE_API_KEY`。
+- 完全退出程序后重新启动。
+
+返回 `401` / `Unauthorized`：
+
+- API Key 无效、已删除或复制时包含空格，请重新创建并保存。
+
+返回 `403`：
+
+- 当前阿里云账号可能尚未开通模型，或没有 `qwen-plus` 调用权限。
+
+连接超时：
+
+- 检查网络、防火墙和代理设置。
+- 国内账号应使用默认国内 DashScope 地址。
+
+程序无法启动：
+
+- 检查 WebView2 Runtime。
+- 查看日志：
+
+  ```text
+  %LOCALAPPDATA%\StoryFactory\logs\storyfactory.log
+  ```
+
+未签名程序被拦截：
+
+- 内部测试包可能触发 SmartScreen；正式对外发布前需要完成 Windows 代码签名。
+
+### 19.9 开发者构建 Windows 安装包
+
+Windows 安装包必须在 Windows 10/11 x64 上构建，不能直接在 macOS 上交叉生成。构建机需要：
+
+- Git
+- 64 位 Python 3.11 或 3.12
+- Inno Setup 6（仅生成安装器时需要）
+
+在 PowerShell 中执行：
+
+```powershell
+git clone https://github.com/hwen9893-cloud/factory.git
+cd factory
+git switch codex/windows-desktop
+.\scripts\build_windows.ps1
+```
+
+只构建免安装版：
+
+```powershell
+.\scripts\build_windows.ps1 -SkipInstaller
+```
+
+输出文件：
+
+```text
+release\windows\portable\StoryFactory\StoryFactory.exe
+release\windows\installer\StoryFactory-Setup-<版本号>.exe
+```
+
+也可以在 GitHub 仓库的 Actions 页面手动运行 `Build Windows desktop`。当前工作流生成 portable Artifact。
+
+构建脚本的直接调用形式是：
 
 ```powershell
 .\scripts\build_windows.ps1
 ```
 
-发布版将配置、日志、项目和数据库写入 `%LOCALAPPDATA%\StoryFactory`，不会写入
-Program Files；API Key 保存到 Windows Credential Manager。完整构建、安装和验收说明见
-[`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md)。
+更详细的构建与验收清单见 [`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md)。
