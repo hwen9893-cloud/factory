@@ -9,6 +9,7 @@ from typing import Any
 from nicegui import ui
 
 from factory.gui.adapters import dashboard_view
+from factory.gui.components import metric_card, notify_error, page_intro, section_header, status_badge
 from factory.gui.presentation.dashboard import DashboardView
 from factory.gui.theme import empty_book, page_header
 from factory.service import FactoryService
@@ -19,7 +20,7 @@ def build_dashboard(*, book_id: str | None, settings: Settings) -> None:
     service = FactoryService(settings)
     resolved = service.resolve_book(book_id)
     if not resolved:
-        page_header("Dashboard", "dashboard")
+        page_header("首页", "dashboard")
         empty_book()
         return
     DashboardPage(service, resolved).render()
@@ -36,44 +37,49 @@ class DashboardPage:
     def render(self) -> None:
         snap = dashboard_view(self.service, self.book_id)
         with ui.element("div").classes("page-shell"):
-            page_header("Dashboard", "dashboard")
+            page_header("首页", "dashboard", project=snap.title)
             with ui.element("div").classes("page-body"):
-                ui.label("写到哪了，下一步做什么。正文请到 Chapter Studio。").classes("muted")
-                with ui.element("div").classes("stat-grid"):
-                    self._stat(snap.title, "当前小说")
-                    vol = f"卷{snap.volume_no}" + (f"  {snap.volume_title}" if snap.volume_title else "")
-                    self._stat(vol, "当前卷")
-                    self._stat(f"{snap.completed} / {snap.outlined or '—'}", "当前章节")
-                    self._stat(str(snap.word_count) if snap.word_count else "—", "总字数（final.md）")
-                with ui.element("div").classes("card-grid"):
-                    self._card("最近章节", self._recent_chapter(snap), "/studio")
-                    self._card("当前模型", f"Writer → {snap.writer_label}", "/models")
-                    self._card("未收束线索", self._lines(snap.open_threads) or "暂无开放线索")
-                    self._card("最近任务", self._lines(snap.recent_tasks) or "暂无调用记录")
-                with ui.row().classes("items-center mt-4"):
-                    ui.button("继续下一章", on_click=self._continue).props("unelevated")
-                    self.status_lbl = ui.label("Ready").classes("muted")
-                    if not snap.has_outline:
-                        ui.label("需要先 factory architect").classes("muted")
+                with ui.element("div").classes("content-frame"):
+                    intro = page_intro("创作概览", "集中查看项目进度、模型状态和最近任务，并快速继续当前创作。")
+                    with intro:
+                        with ui.element("div").classes("page-actions"):
+                            ui.button("进入创作工作台", on_click=lambda: ui.navigate.to("/studio"), icon="edit_note").props("unelevated no-caps")
+                    with ui.element("div").classes("stat-grid"):
+                        metric_card(snap.title, "当前项目", icon="auto_stories")
+                        vol = f"第 {snap.volume_no} 卷" + (f" · {snap.volume_title}" if snap.volume_title else "")
+                        metric_card(vol, "当前进度", icon="menu_book")
+                        metric_card(f"{snap.completed} / {snap.outlined or '—'}", "已完成章节", icon="task_alt", hint="已定稿 / 已规划")
+                        metric_card(f"{snap.word_count:,}" if snap.word_count else "—", "累计字数", icon="format_align_left", hint="仅统计已定稿正文")
+                    section_header("需要关注", "线索、模型与最近生成状态")
+                    with ui.element("div").classes("card-grid"):
+                        self._card("最近章节", self._recent_chapter(snap), "/studio", "history_edu")
+                        self._card("当前创作模型", snap.writer_label, "/models", "smart_toy", badge="已启用")
+                        self._card("未收束线索", self._lines(snap.open_threads) or "暂无开放线索", icon="device_hub")
+                        self._card("最近任务", self._lines(snap.recent_tasks) or "暂无调用记录", "/logs", "schedule")
+                    with ui.row().classes("items-center mt-5"):
+                        ui.button("继续下一章", on_click=self._continue, icon="play_arrow").props("unelevated no-caps")
+                        self.status_lbl = ui.label("准备就绪").classes("muted")
+                        if not snap.has_outline:
+                            status_badge("需要先生成小说架构", "warning")
         ui.timer(0.2, self._drain)
 
-    def _stat(self, value: str, label: str) -> None:
-        with ui.element("div").classes("stat-card"):
-            ui.label(value).classes("value")
-            ui.label(label).classes("label")
-
-    def _card(self, title: str, body: str, href: str | None = None) -> None:
+    def _card(self, title: str, body: str, href: str | None = None, icon: str = "info", badge: str = "") -> None:
         with ui.element("div").classes("info-card"):
-            ui.html(f"<h3>{title}</h3>")
+            with ui.row().classes("w-full items-center no-wrap"):
+                ui.icon(icon, size="17px").style("color:var(--muted)")
+                ui.html(f"<h3 style='margin:0'>{title}</h3>")
+                ui.space()
+                if badge:
+                    status_badge(badge, "success")
             ui.label(body).style("white-space: pre-wrap")
             if href:
-                ui.link("打开", href).classes("nav-link")
+                ui.link("查看详情 →", href).classes("card-link")
 
     def _recent_chapter(self, snap: DashboardView) -> str:
         if snap.last_final:
-            return f"ch{snap.last_final:03d}  {snap.last_title or ''} · 已定稿"
+            return f"第 {snap.last_final} 章  {snap.last_title or ''} · 已定稿"
         if snap.next_chapter:
-            return f"下一章 ch{snap.next_chapter:03d} · 未写"
+            return f"下一章：第 {snap.next_chapter} 章 · 待创作"
         return "尚未写章"
 
     def _lines(self, rows: tuple[str, ...]) -> str:
@@ -83,7 +89,7 @@ class DashboardPage:
         if self.busy:
             return
         self.busy = True
-        self.status_lbl.text = "Running..."
+        self.status_lbl.text = "正在生成下一章…"
 
         def work() -> None:
             try:
@@ -103,6 +109,8 @@ class DashboardPage:
         except Empty:
             return
         self.busy = False
-        self.status_lbl.text = message
+        self.status_lbl.text = message if kind == "ok" else "生成失败"
         if kind == "ok":
             ui.navigate.reload()
+        else:
+            notify_error(message)

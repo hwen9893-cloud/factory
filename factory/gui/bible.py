@@ -6,17 +6,18 @@ from typing import Any
 
 from nicegui import ui
 
+from factory.gui.components import empty_state, page_intro
 from factory.gui.theme import empty_book, page_header
 from factory.service import FactoryService
 from factory.settings import Settings
 
 CATEGORIES = (
-    ("world", "World"),
-    ("characters", "Characters"),
-    ("factions", "Factions"),
-    ("locations", "Locations"),
-    ("cultivation", "Cultivation"),
-    ("rules", "Rules"),
+    ("world", "世界概览"),
+    ("characters", "角色"),
+    ("factions", "势力"),
+    ("locations", "地点"),
+    ("cultivation", "修炼体系"),
+    ("rules", "世界规则"),
 )
 
 
@@ -24,7 +25,7 @@ def build_bible(*, book_id: str | None, settings: Settings) -> None:
     service = FactoryService(settings)
     resolved = service.resolve_book(book_id)
     if not resolved:
-        page_header("Story Bible", "bible")
+        page_header("世界设定", "bible")
         empty_book()
         return
     BiblePage(service, resolved).render()
@@ -41,18 +42,17 @@ class BiblePage:
 
     def render(self) -> None:
         with ui.element("div").classes("page-shell"):
-            page_header("Story Bible", "bible")
+            page_header("世界设定", "bible", project=self.book_id)
             with ui.element("div").classes("page-body"):
-                ui.label("设定来自 knowledge/*。此页可手工改并保存，不在这里跑 world_builder。").classes("muted")
-                with ui.element("div").classes("split"):
-                    with ui.element("div").classes("side-list"):
-                        for key, label in CATEGORIES:
-                            btn = ui.button(label, on_click=lambda _e=None, k=key: self._select_category(k)).props(
-                                "flat dense no-caps"
-                            )
-                            btn.classes("side-item")
-                            self.buttons[key] = btn
-                    self.detail = ui.element("div")
+                with ui.element("div").classes("content-frame"):
+                    page_intro("世界设定", "维护小说的世界规则、人物、势力和地点。这里的内容会作为创作上下文提供给模型。")
+                    with ui.element("div").classes("split"):
+                        with ui.element("div").classes("side-list"):
+                            for key, label in CATEGORIES:
+                                btn = ui.button(label, on_click=lambda _e=None, k=key: self._select_category(k)).props("flat dense no-caps")
+                                btn.classes("side-item")
+                                self.buttons[key] = btn
+                        self.detail = ui.element("div").classes("panel-card")
         self._paint()
 
     def _select_category(self, key: str) -> None:
@@ -81,10 +81,10 @@ class BiblePage:
                 self._rules(world)
 
     def _world(self, world: dict[str, Any]) -> None:
-        ui.label("World").classes("text-h6")
+        ui.label("世界概览").classes("text-h6")
         summary = ui.textarea(value=str(world.get("summary") or ""), label="摘要").classes("w-full")
         rules = ui.textarea(value="\n".join(world.get("rules") or []), label="规则（一行一条）").classes("w-full")
-        ui.button("Save", on_click=lambda: self._save_world(summary.value, rules.value)).props("unelevated")
+        ui.button("保存修改", on_click=lambda: self._save_world(summary.value, rules.value), icon="save").props("unelevated no-caps")
 
     def _save_world(self, summary: str, rules_text: str) -> None:
         self.service.save_world_bible(
@@ -92,13 +92,13 @@ class BiblePage:
             summary=summary,
             rules=[line for line in str(rules_text or "").splitlines() if line.strip()],
         )
-        ui.notify("已保存 world.json")
+        ui.notify("世界设定已保存", type="positive")
         self._paint()
 
     def _characters(self, rows: list[dict[str, Any]]) -> None:
-        ui.label("Characters").classes("text-h6")
+        ui.label("角色").classes("text-h6")
         if not rows:
-            ui.label("还没有人物。先 factory architect。").classes("muted")
+            empty_state("暂无角色", "生成小说架构后，人物会出现在这里。", icon="person_add")
             return
         with ui.row().classes("w-full"):
             with ui.column().classes("w-40"):
@@ -134,7 +134,8 @@ class BiblePage:
             secrets = ui.textarea(value="\n".join(item.get("secrets") or []), label="秘密").classes("w-full")
             status = ui.input(value=str(item.get("status") or "alive"), label="状态").classes("w-full")
             ui.button(
-                "Save",
+                "保存角色",
+                icon="save",
                 on_click=lambda: self._save_character(
                     character_id,
                     {
@@ -145,11 +146,11 @@ class BiblePage:
                         "status": status.value,
                     },
                 ),
-            ).props("unelevated")
+            ).props("unelevated no-caps")
 
     def _save_character(self, character_id: str, patch: dict[str, Any]) -> None:
         self.service.save_character_bible(self.book_id, character_id, patch)
-        ui.notify("已保存 characters.json")
+        ui.notify("角色资料已保存", type="positive")
 
     def _named_list(self, rows: list[dict[str, Any]], empty: str) -> None:
         ui.label(empty).classes("text-h6")
@@ -164,7 +165,7 @@ class BiblePage:
                     ui.label(str(extra)).classes("muted")
 
     def _cultivation(self, cultivation: dict[str, Any]) -> None:
-        ui.label("Cultivation").classes("text-h6")
+        ui.label("修炼体系").classes("text-h6")
         realms = cultivation.get("realms") or []
         if not realms:
             ui.label("暂无境界表。").classes("muted")
@@ -179,10 +180,10 @@ class BiblePage:
                 ui.label(f"{item.get('from_realm')} → {item.get('to_realm')}").classes("muted")
 
     def _rules(self, world: dict[str, Any]) -> None:
-        ui.label("Rules").classes("text-h6")
+        ui.label("世界规则").classes("text-h6")
         rules = world.get("rules") or []
         if not rules:
-            ui.label("暂无世界规则。可在 World 分类里编辑。").classes("muted")
+            ui.label("暂无世界规则。可在“世界概览”中编辑。").classes("muted")
             return
         for line in rules:
             ui.label(f"· {line}")

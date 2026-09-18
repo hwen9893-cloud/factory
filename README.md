@@ -26,6 +26,7 @@
 16. [如何添加新 Prompt](#16-如何添加新-prompt)
 17. [测试](#17-测试)
 18. [Roadmap](#18-roadmap)
+19. [Windows 桌面版](#19-windows-桌面版)
 
 ---
 
@@ -193,6 +194,13 @@ GUI（可选，同一套 FactoryService）：
 ```bash
 pip install -e ".[gui]"
 factory studio
+```
+
+桌面原生开发模式（需要 pywebview）：
+
+```bash
+pip install -e ".[desktop,models]"
+storyfactory
 ```
 
 跑测试：
@@ -764,3 +772,18 @@ install_mock(workflow.models, mock)
 - Agent 互调或多智能体自治
 - LangGraph 一类编排框架
 - 动画、立绘、TTS 管线（见 `docs/`，与本仓库运行时无关）
+
+---
+
+## 19. Windows 桌面版
+
+Windows 10/11 x64 发布版使用 NiceGUI native + PyInstaller onedir + Inno Setup，普通用户
+不需要安装 Python。构建机在 PowerShell 中运行：
+
+```powershell
+.\scripts\build_windows.ps1
+```
+
+发布版将配置、日志、项目和数据库写入 `%LOCALAPPDATA%\StoryFactory`，不会写入
+Program Files；API Key 保存到 Windows Credential Manager。完整构建、安装和验收说明见
+[`docs/WINDOWS_DESKTOP.md`](docs/WINDOWS_DESKTOP.md)。

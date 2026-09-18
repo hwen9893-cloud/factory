@@ -53,7 +53,7 @@ def plan_md(plan: dict[str, Any] | None) -> str:
         lines.append(f"\n目标：{plan['goal']}")
     scenes = plan.get("scenes") or []
     if scenes:
-        lines.append("\n**Scenes**")
+        lines.append("\n**场景**")
         for scene in scenes:
             if isinstance(scene, dict):
                 lines.append(
@@ -63,13 +63,13 @@ def plan_md(plan: dict[str, Any] | None) -> str:
                 lines.append(f"- {scene}")
     forbidden = plan.get("must_not") or []
     if forbidden:
-        lines.append("\n**Must not**")
+        lines.append("\n**必须避免**")
         lines.extend(f"- {item}" for item in forbidden)
     return "\n".join(lines)
 
 
 def context_md(ctx: dict[str, Any]) -> str:
-    lines = ["### Characters"]
+    lines = ["### 角色"]
     characters = ctx.get("characters") or []
     if characters:
         for item in characters:
@@ -81,7 +81,7 @@ def context_md(ctx: dict[str, Any]) -> str:
                 lines.append(f"- {item}")
     else:
         lines.append("_（无）_")
-    lines.append("\n### Plot")
+    lines.append("\n### 剧情")
     plot = ctx.get("plot") or []
     if isinstance(plot, list):
         if plot:
@@ -94,7 +94,7 @@ def context_md(ctx: dict[str, Any]) -> str:
             lines.append("_（无）_")
     else:
         lines.append(f"```\n{_short_json(plot)}\n```")
-    lines.append("\n### World")
+    lines.append("\n### 世界设定")
     world = ctx.get("world") or {}
     if isinstance(world, dict):
         summary = world.get("world_summary") or world.get("summary") or ""
@@ -103,7 +103,7 @@ def context_md(ctx: dict[str, Any]) -> str:
         lines.extend(f"- {item}" for item in rules[:8])
     else:
         lines.append(str(world) or "_（无）_")
-    lines.append("\n### Recent context")
+    lines.append("\n### 近期上下文")
     lines.append(str(ctx.get("recent_context") or "_（无）_"))
     return "\n".join(lines)
 
@@ -112,18 +112,18 @@ def review_md(review: dict[str, Any] | None) -> str:
     if not review:
         return "_尚未审稿_"
     passed = review.get("pass", review.get("passed", True))
-    lines = [f"**Score {review.get('score', '—')}**  ·  {'pass' if passed else 'fail'}"]
+    lines = [f"**评分 {review.get('score', '—')}**  ·  {'通过' if passed else '未通过'}"]
     must = review.get("must_fix") or []
     if must:
-        lines.append("\n**Must fix**")
+        lines.append("\n**必须修改**")
         lines.extend(f"- {item}" for item in must)
     problems = review.get("problems") or []
     if problems:
-        lines.append("\n**Problems**")
+        lines.append("\n**发现的问题**")
         lines.extend(f"- {item}" for item in problems)
     suggestions = review.get("optional_fix") or review.get("suggestions") or []
     if suggestions:
-        lines.append("\n**Suggestions**")
+        lines.append("\n**优化建议**")
         lines.extend(f"- {item}" for item in suggestions)
     return "\n".join(lines)
 
@@ -138,7 +138,7 @@ def continuity_md(report: dict[str, Any] | None) -> str:
         ("物品冲突", "item_conflicts"),
         ("剧情冲突", "plot_conflicts"),
     )
-    lines = [f"severity: **{report.get('severity') or 'none'}**"]
+    lines = [f"严重程度：**{report.get('severity') or '无'}**"]
     for title, key in buckets:
         items = report.get(key) or []
         lines.append(f"\n### {title}")
@@ -183,7 +183,7 @@ def memory_md(memory: dict[str, Any]) -> str:
 def memory_layers_md(overview: dict[str, Any], foreshadowing: list[dict[str, Any]]) -> str:
     canon = overview.get("canon") or {}
     lines = [
-        "### Global Canon",
+        "### 全局事实",
         str(canon.get("world_summary") or "_尚无世界摘要_"),
     ]
     rules = canon.get("rules") or []
@@ -195,7 +195,7 @@ def memory_layers_md(overview: dict[str, Any], foreshadowing: list[dict[str, Any
         lines.append("\n**永久事实**")
         lines.extend(f"- {item}" for item in facts)
 
-    lines.append("\n### Characters State")
+    lines.append("\n### 人物状态")
     characters = overview.get("characters") or []
     if not characters:
         lines.append("尚无人物状态（定稿后 Memory Agent 会更新）。")
@@ -209,7 +209,7 @@ def memory_layers_md(overview: dict[str, Any], foreshadowing: list[dict[str, Any
             bits.append(str(item["status"]))
         lines.append("- " + " · ".join(str(part) for part in bits if part))
 
-    lines.append("\n### Plot Threads")
+    lines.append("\n### 剧情线索")
     if overview.get("conflict"):
         lines.append(f"当前冲突：{overview['conflict']}")
     threads = overview.get("threads") or []
@@ -218,15 +218,15 @@ def memory_layers_md(overview: dict[str, Any], foreshadowing: list[dict[str, Any
     for item in threads:
         lines.append(f"- {item.get('text') or item.get('id')} (`{item.get('status')}`)")
 
-    lines.append("\n### Foreshadowing")
+    lines.append("\n### 伏笔记录")
     if not foreshadowing:
         lines.append("无伏笔记录。")
     for item in foreshadowing:
-        state = "resolved" if item.get("resolved") else "open"
+        state = "已回收" if item.get("resolved") else "开放"
         lines.append(f"- {item.get('clue') or item.get('id')} (`{state}`)")
 
     n = overview.get("recent_n") or 3
-    lines.append(f"\n### Recent Memory（近 {n} 章）")
+    lines.append(f"\n### 近期记忆（近 {n} 章）")
     recent = overview.get("recent") or []
     if not recent:
         lines.append("尚无近章摘要。")

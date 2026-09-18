@@ -63,8 +63,19 @@ def open_thread_lines(
 
 
 def usage_lines(records: tuple[UsageRecord, ...]) -> tuple[str, ...]:
+    labels = {
+        "chapter_writer": "正文生成",
+        "chapter_planner": "章节规划",
+        "continuity": "一致性检查",
+        "continuity_check": "一致性检查",
+        "reviewer": "质量审阅",
+        "quality_review": "质量审阅",
+        "revision": "润色修改",
+        "memory": "记忆更新",
+        "memory_update": "记忆更新",
+    }
     return tuple(
-        f"{item.agent} · {'ok' if item.success else 'fail'} · {item.model}" for item in records
+        f"{labels.get(item.agent, item.agent)} · {'成功' if item.success else '失败'} · {item.model}" for item in records
     )
 
 

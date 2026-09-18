@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from factory.settings import Settings, load_settings
 
 
@@ -12,6 +15,9 @@ def run_studio(
     port: int = 8080,
     settings: Settings | None = None,
     show: bool = True,
+    native: bool = False,
+    favicon: Path | None = None,
+    window_size: tuple[int, int] = (1280, 820),
 ) -> None:
     try:
         from nicegui import ui
@@ -21,15 +27,19 @@ def run_studio(
     from factory.gui.bible import build_bible
     from factory.gui.dashboard import build_dashboard
     from factory.gui.memory import build_memory
+    from factory.gui.logs import build_logs
     from factory.gui.models import build_models_page
     from factory.gui.outline import build_outline
     from factory.gui.settings import build_settings
     from factory.gui.studio import build_studio
+    from factory.gui.welcome import build_welcome
 
     resolved = settings or load_settings()
 
     @ui.page("/")
     def dashboard_page() -> None:
+        if os.environ.get("STORYFACTORY_DESKTOP") == "1" and build_welcome(settings=resolved):
+            return
         build_dashboard(book_id=book, settings=resolved)
 
     @ui.page("/studio")
@@ -52,11 +62,28 @@ def run_studio(
     def models_page() -> None:
         build_models_page(settings=resolved)
 
+    @ui.page("/logs")
+    def logs_page() -> None:
+        build_logs(book_id=book, settings=resolved)
+
     @ui.page("/settings")
     def settings_page() -> None:
         build_settings(book_id=book, settings=resolved)
 
-    ui.run(host=host, port=port, title="Novel Factory", reload=False, show=show)
+    run_args = {
+        "host": host,
+        "title": "Story Factory · AI 小说创作工作台",
+        "reload": False,
+        "show": show and not native,
+        "native": native,
+        "favicon": str(favicon) if favicon and favicon.exists() else None,
+    }
+    if native:
+        run_args["window_size"] = window_size
+        run_args["fullscreen"] = False
+    else:
+        run_args["port"] = port
+    ui.run(**run_args)
 
 
 def main(argv: list[str] | None = None) -> None:

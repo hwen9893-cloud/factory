@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from queue import Empty, Queue
 from threading import Thread
+from time import monotonic
 from typing import Any, Callable
 
 from nicegui import ui
 
 from factory.events import WorkflowEvent
 from factory.gui.adapters import inspector_view, nav_tree
+from factory.gui.components import notify_error, status_badge
 from factory.gui.presentation.model_options import build_model_options, profile_label
 from factory.gui.presentation.inspector import (
     chapter_version_label,
@@ -35,42 +37,45 @@ from factory.gui.presentation.progress import (
     track_done_stage,
     track_key,
 )
-from factory.gui.theme import apply_theme, empty_book, nav_links, page_header
+from factory.gui.theme import apply_theme, empty_book, page_header
 from factory.service import ChapterResult, FactoryService
 from factory.settings import Settings
 
 _CSS = """
-.studio-shell { position: fixed; inset: 0; display: flex; flex-direction: column; background: #101216; color: #e8e6e3; }
-.studio-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-.studio-status { font-size: 13px; color: #c9a227; min-width: 180px; text-align: right; }
-.studio-body { flex: 1; min-height: 0; display: flex; }
-.studio-nav { width: 240px; flex: 0 0 240px; border-right: 1px solid #2a2e36; overflow: auto; padding: 12px 10px; }
-.studio-editor { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 12px 18px 10px; }
-.studio-inspect { width: 360px; flex: 0 0 360px; min-height: 0; border-left: 1px solid #2a2e36; overflow: auto; padding: 8px 10px 16px; }
+.studio-body { position:absolute; inset:var(--topbar) 0 0 var(--sidebar); min-height:0; display:flex; }
+.studio-nav { width:250px; flex:0 0 250px; border-right:1px solid var(--border-soft); overflow:auto; padding:18px 12px; background:#11171f; }
+.studio-editor { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; padding:14px 20px 12px; }
+.studio-inspect { width:350px; flex:0 0 350px; min-height:0; border-left:1px solid var(--border-soft); overflow:auto; padding:10px 12px 18px; background:#11171f; }
 .studio-inspect .q-tab { min-height: 36px; padding: 0 10px; font-size: 12px; }
-.nav-book { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-.nav-vol { font-size: 12px; color: #9aa0aa; margin: 10px 0 4px; }
+.studio-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--border-soft); }
+.studio-actions { margin-left:auto; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.studio-runline { display:flex; align-items:center; gap:10px; min-height:32px; padding:8px 0 2px; }
+.studio-status { font-size:12px; color:var(--text-2); }
+.elapsed { margin-left:auto; font:11px var(--font-mono); color:var(--muted); }
+.nav-book { font-size:14px; font-weight:650; margin:0 5px 12px; }
+.nav-vol { font-size:11px; color:var(--muted); margin:16px 8px 5px; }
 .nav-ch { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 6px;
-  cursor: pointer; font-size: 13px; color: #d7d4ce; }
-.nav-ch:hover { background: #1e222a; }
-.nav-ch.active { background: #2a3344; color: #fff; }
-.nav-status { margin-left: auto; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #8b909a; }
-.nav-status.final { color: #6fbf8b; }
-.nav-status.draft { color: #c9a227; }
-.nav-status.failed { color: #d07070; }
-.nav-status.running { color: #6ea8ff; }
+  cursor: pointer; font-size: 13px; color: var(--text-2); transition:background .18s ease; }
+.nav-ch:hover { background: var(--surface-hover); }.nav-ch.active { background:var(--primary-soft); color:#eaf2ff; }
+.nav-status { margin-left:auto; font-size:10px; color:var(--muted); }.nav-status.final { color:#7ed3a3; }.nav-status.draft { color:#e5b66d; }.nav-status.failed { color:#ee9298; }.nav-status.running { color:#91b9fb; }
 .editor-title { flex: 0 0 auto; }
-.editor-meta { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; font-size: 12px; color: #8b909a; padding: 4px 0 8px; }
+.editor-meta { flex:0 0 auto; display:flex; align-items:center; gap:14px; font-size:12px; color:var(--muted); padding:4px 0 8px; }
 .studio-steps { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 0 8px; font-size: 12px; }
-.step-pending { color: #8b909a; }
-.step-active { color: #c9a227; }
-.step-done { color: #6fbf8b; }
+.step-pending { color:var(--muted); }.step-active { color:#91b9fb; }.step-done { color:#7ed3a3; }
 .body-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .body-wrap .q-textarea, .body-wrap .q-field, .body-wrap .q-field__inner, .body-wrap .q-field__control { height: 100%; }
-.body-wrap .q-field__control { background: #1a1d24 !important; }
+.body-wrap .q-field__control { background:var(--surface)!important; border-radius:9px!important; }
 .body-wrap textarea { height: 100% !important; font-size: 16px !important; line-height: 1.85 !important;
-  font-family: "Iowan Old Style", "Songti SC", "Noto Serif SC", Georgia, serif !important; }
+  font-family:"Songti SC","Noto Serif CJK SC","Microsoft YaHei",serif!important; padding:18px!important; }
+@media(max-width:1050px){.studio-nav{width:210px;flex-basis:210px}.studio-inspect{width:300px;flex-basis:300px}.studio-editor{padding-inline:14px}}
+@media(max-width:820px){.studio-inspect{display:none}.studio-nav{width:190px;flex-basis:190px}}
+@media(max-width:600px){.studio-nav{display:none}.studio-editor{padding:10px}.studio-toolbar .q-select,.studio-toolbar .q-field{max-width:150px}.studio-actions{margin-left:0}}
+body.body--light .studio-nav,body.body--light .studio-inspect{background:#f8fafc}
 """
+
+_STEP_ZH = {"context": "准备上下文", "plan": "章节规划", "write": "生成正文", "continuity": "一致性检查", "review": "质量审阅", "memory": "更新记忆"}
+_STATUS_ZH = {"Planning": "正在规划章节", "Writing": "正在生成正文", "Checking continuity": "正在检查一致性", "Reviewing": "正在审阅质量", "Revising": "正在润色修改", "Updating memory": "正在更新记忆", "Saving": "正在保存", "Planning volume": "正在规划分卷"}
+_CH_STATUS_ZH = {"final": "已定稿", "draft": "草稿", "failed": "失败", "running": "运行中", "outlined": "待创作"}
 
 
 def build_studio(*, book_id: str | None, settings: Settings) -> None:
@@ -100,10 +105,14 @@ class StudioPage:
         self.steps: dict[str, Any] = {}
         self._stream_buf = ""
         self._stream_active = False
+        self.started_at: float | None = None
+        self.elapsed_lbl: Any = None
+        self.inspect_panel: Any = None
+        self.inspect_visible = True
 
     def render(self) -> None:
         if not self.book_id:
-            page_header("Chapter Studio", "studio")
+            page_header("创作工作台", "studio")
             empty_book()
             return
         self._focus_current_chapter()
@@ -114,50 +123,47 @@ class StudioPage:
             models = {assigned: profile_label(self.service.registry, assigned), **models}
 
         with ui.element("div").classes("studio-shell"):
-            with ui.element("div").classes("studio-header"):
-                with ui.element("div").classes("studio-brand"):
-                    ui.html("<strong>Chapter Studio</strong>Novel Factory")
-                nav_links("studio")
-                self.model_sel = (
-                    ui.select(models, value=assigned, label="Writer Model")
-                    .props("dense outlined emit-value map-options")
-                    .classes("w-56")
-                    .on_value_change(self._on_writer_model)
-                )
-                self.target_in = (
-                    ui.number(label="Target", value=self.service.settings.chapter_target_words, format="%.0f")
-                    .props("dense outlined suffix=words")
-                    .classes("w-36")
-                )
-                with ui.element("div").classes("studio-actions"):
-                    self._action("Plan", self._plan, primary=False)
-                    self._action("Generate", self._generate, primary=True)
-                    self._action("Review", self._review, primary=False)
-                    self._action("Revise", self._revise, primary=False)
-                    self._action("Accept", self._accept, primary=False)
-                self.status_lbl = ui.label("Ready").classes("studio-status")
+            page_header("创作工作台", "studio", project=str(self.book_id))
             with ui.element("div").classes("studio-body"):
                 self.nav_box = ui.element("div").classes("studio-nav")
                 with ui.element("div").classes("studio-editor"):
-                    self.title_in = ui.input(value=view.title).props("borderless").classes("text-h6 w-full editor-title")
+                    with ui.element("div").classes("studio-toolbar"):
+                        # Writer Model remains a registry-backed profile selector; the visible label is localized.
+                        self.model_sel = (
+                            ui.select(models, value=assigned, label="创作模型")
+                            .props("dense outlined emit-value map-options options-dense")
+                            .classes("w-52")
+                            .on_value_change(self._on_writer_model)
+                        )
+                        self.target_in = (
+                            ui.number(label="目标字数", value=self.service.settings.chapter_target_words, format="%.0f")
+                            .props("dense outlined suffix=字")
+                            .classes("w-32")
+                        )
+                        with ui.element("div").classes("studio-actions"):
+                            self._action("规划", self._plan, primary=False, icon="schema")
+                            self._action("生成正文", self._generate, primary=True, icon="auto_awesome")
+                            self._action("审阅", self._review, primary=False, icon="fact_check")
+                            self._action("润色", self._revise, primary=False, icon="auto_fix_high")
+                            self._action("定稿", self._accept, primary=False, icon="check_circle")
+                            ui.button(icon="dock_to_right", on_click=self._toggle_inspector).props("flat round dense aria-label=收起资料面板").tooltip("展开 / 收起资料面板")
+                    with ui.element("div").classes("studio-runline"):
+                        status_badge("就绪", "success")
+                        self.status_lbl = ui.label("准备就绪，可开始规划或生成正文").classes("studio-status")
+                        self.elapsed_lbl = ui.label("00:00").classes("elapsed")
+                    self.title_in = ui.input(value=view.title, placeholder="输入章节标题").props("borderless").classes("text-h6 w-full editor-title")
                     with ui.element("div").classes("editor-meta"):
                         self.words_lbl = ui.label(f"{view.word_count} 字")
-                        self.version_lbl = ui.label(
-                            chapter_version_label(view.source, view.revision, view.pipeline_status)
-                        )
+                        self.version_lbl = ui.label(self._version_label(view))
                         ui.space()
-                        save_btn = ui.button("Save", on_click=self._save).props("flat dense")
-                        cont_btn = ui.button("继续生成", on_click=self._continue).props("flat dense")
+                        save_btn = ui.button("保存修改", on_click=self._save, icon="save").props("flat dense no-caps")
+                        cont_btn = ui.button("继续生成", on_click=self._continue, icon="add").props("flat dense no-caps")
                         self.buttons.extend([save_btn, cont_btn])
                     self._render_steps()
                     with ui.element("div").classes("body-wrap"):
-                        self.body_in = (
-                            ui.textarea(value=view.body)
-                            .props("outlined input-class=h-full")
-                            .classes("w-full h-full")
-                        )
+                        self.body_in = ui.textarea(value=view.body, placeholder="在这里开始创作…").props("outlined input-class=h-full").classes("w-full h-full")
                     self.body_in.on("update:model-value", lambda e: self._count_words())
-                with ui.element("div").classes("studio-inspect"):
+                with ui.element("div").classes("studio-inspect") as self.inspect_panel:
                     self._inspector_tabs()
         self._paint_nav()
         self._paint_inspector()
@@ -171,18 +177,18 @@ class StudioPage:
             return
         self.service.set_role_model("writer", profile_id, persist=True)
 
-    def _action(self, label: str, handler: Callable[[], None], *, primary: bool) -> None:
+    def _action(self, label: str, handler: Callable[[], None], *, primary: bool, icon: str = "") -> None:
         props = "unelevated" if primary else "outline"
-        btn = ui.button(label, on_click=handler).props(props)
+        btn = ui.button(label, on_click=handler, icon=icon or None).props(f"{props} no-caps dense")
         self.buttons.append(btn)
 
     def _inspector_tabs(self) -> None:
         with ui.tabs().classes("w-full") as tabs:
-            tab_plan = ui.tab("Plan")
-            tab_ctx = ui.tab("Context")
-            tab_rev = ui.tab("Review")
-            tab_con = ui.tab("Continuity")
-            tab_mem = ui.tab("Memory")
+            tab_plan = ui.tab("规划")
+            tab_ctx = ui.tab("上下文")
+            tab_rev = ui.tab("审阅")
+            tab_con = ui.tab("一致性")
+            tab_mem = ui.tab("记忆")
         with ui.tab_panels(tabs, value=tab_plan).classes("w-full"):
             with ui.tab_panel(tab_plan):
                 self.inspect["plan"] = ui.markdown("").classes("inspect-block")
@@ -202,10 +208,11 @@ class StudioPage:
         with self.nav_box:
             ui.label(tree.label).classes("nav-book")
             for volume in tree.children:
-                ui.label(volume.label).classes("nav-vol")
+                title = volume.label.split("  ", 1)[1] if "  " in volume.label else ""
+                ui.label(f"第 {volume.volume_no or 1} 卷" + (f" · {title}" if title else "")).classes("nav-vol")
                 for chapter in volume.children:
                     self._nav_chapter(chapter)
-            ui.button("新建章节", on_click=self._new_chapter).props("flat dense").classes("mt-3")
+            ui.button("新建章节", on_click=self._new_chapter, icon="add").props("flat dense no-caps").classes("mt-3")
 
     def _nav_chapter(self, node: NavNode) -> None:
         ch_no = int(node.ch_no or 0)
@@ -215,8 +222,9 @@ class StudioPage:
             self._select_chapter(number, volume)
 
         with ui.element("div").classes(classes).on("click", select):
-            ui.label(node.label)
-            ui.label(node.status).classes(f"nav-status {node.status}")
+            title = node.label.split("  ", 1)[1] if "  " in node.label else ""
+            ui.label(f"第 {ch_no} 章" + (f" · {title}" if title else ""))
+            ui.label(_CH_STATUS_ZH.get(node.status, node.status)).classes(f"nav-status {node.status}")
 
     def _select_chapter(self, ch_no: int, volume_no: int | None) -> None:
         if self.busy:
@@ -236,7 +244,19 @@ class StudioPage:
 
     def _show_meta(self, chapter: ChapterResult) -> None:
         self.words_lbl.text = f"{chapter.word_count} 字"
-        self.version_lbl.text = chapter_version_label(chapter.source, chapter.revision, chapter.pipeline_status)
+        self.version_lbl.text = self._version_label(chapter)
+
+    def _version_label(self, chapter: ChapterResult) -> str:
+        raw = chapter_version_label(chapter.source, chapter.revision, chapter.pipeline_status)
+        for source, label in (("final", "定稿"), ("draft", "草稿"), ("completed", "已完成"), ("failed", "失败"), ("outlined", "已规划")):
+            raw = raw.replace(source, label)
+        return raw.replace("rev", "修订")
+
+    def _toggle_inspector(self) -> None:
+        if self.inspect_panel is None:
+            return
+        self.inspect_visible = not self.inspect_visible
+        self.inspect_panel.set_visibility(self.inspect_visible)
 
     def _count_words(self) -> None:
         body = str(self.body_in.value or "")
@@ -280,7 +300,7 @@ class StudioPage:
             str(self.body_in.value or ""),
         )
         self._show_meta(view)
-        self.status_lbl.text = "Saved"
+        self.status_lbl.text = "修改已保存"
         self._paint_nav()
 
     def _new_chapter(self) -> None:
@@ -291,30 +311,31 @@ class StudioPage:
         self._reload_editor()
         self._paint_nav()
         self._paint_inspector()
-        self.status_lbl.text = f"Chapter {self.ch_no}"
+        self.status_lbl.text = f"已新建第 {self.ch_no} 章"
 
     def _plan(self) -> None:
-        self._spawn("Planning...", lambda: self.service.plan(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在规划章节…", lambda: self.service.plan(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _generate(self) -> None:
-        self._spawn("Writing...", lambda: self.service.generate(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在生成正文…", lambda: self.service.generate(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _review(self) -> None:
-        self._spawn("Reviewing...", lambda: self.service.review(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在审阅质量…", lambda: self.service.review(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _revise(self) -> None:
-        self._spawn("Revising...", lambda: self.service.revise(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在润色修改…", lambda: self.service.revise(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _continue(self) -> None:
-        self._spawn("Writing...", lambda: self.service.continue_generate(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在继续生成…", lambda: self.service.continue_generate(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _accept(self) -> None:
-        self._spawn("Updating Memory...", lambda: self.service.accept(self.book_id, self.ch_no, **self._editor_kwargs()))
+        self._spawn("正在定稿并更新记忆…", lambda: self.service.accept(self.book_id, self.ch_no, **self._editor_kwargs()))
 
     def _spawn(self, label: str, fn: Callable[[], Any]) -> None:
         if self.busy or not self.book_id:
             return
         self.busy = True
+        self.started_at = monotonic()
         self.status_lbl.text = label
         for btn in self.buttons:
             btn.disable()
@@ -331,7 +352,7 @@ class StudioPage:
     def _render_steps(self) -> None:
         with ui.element("div").classes("studio-steps"):
             for key, label, _stages in TRACK_STEPS:
-                self.steps[key] = ui.label(f"{step_mark('pending')} {label}").classes(step_class("pending"))
+                self.steps[key] = ui.label(f"{step_mark('pending')} {_STEP_ZH.get(key, label)}").classes(step_class("pending"))
 
     def _reset_steps(self) -> None:
         self._stream_buf = ""
@@ -340,14 +361,14 @@ class StudioPage:
             widget = self.steps.get(key)
             if widget is None:
                 continue
-            widget.text = f"{step_mark('pending')} {label}"
+            widget.text = f"{step_mark('pending')} {_STEP_ZH.get(key, label)}"
             widget.classes(replace=step_class("pending"))
 
     def _set_step(self, key: str, state: str) -> None:
         widget = self.steps.get(key)
         if widget is None:
             return
-        widget.text = f"{step_mark(state)} {step_label(key)}"
+        widget.text = f"{step_mark(state)} {_STEP_ZH.get(key, step_label(key))}"
         widget.classes(replace=step_class(state))
 
     def _apply_tokens(self, chunk: str) -> None:
@@ -369,7 +390,8 @@ class StudioPage:
             self._apply_tokens(item.content)
             return
         if is_stage_start(item):
-            self.status_lbl.text = status_text(item)
+            raw = status_text(item)
+            self.status_lbl.text = _STATUS_ZH.get(raw, raw)
         elif is_error(item):
             self.status_lbl.text = status_text(item)
         key = track_key(item.stage, item.agent)
@@ -392,6 +414,9 @@ class StudioPage:
             self._stream_active = False
 
     def _drain(self) -> None:
+        if self.started_at is not None and self.elapsed_lbl is not None:
+            elapsed = int(monotonic() - self.started_at)
+            self.elapsed_lbl.text = f"{elapsed // 60:02d}:{elapsed % 60:02d}"
         pending: list[Any] = []
         while True:
             try:
@@ -416,14 +441,15 @@ class StudioPage:
             kind, message = item
             self.busy = False
             self._stream_active = False
+            self.started_at = None
             for btn in self.buttons:
                 btn.enable()
             if kind == "fail":
-                self.status_lbl.text = message or "Error"
+                self.status_lbl.text = "任务执行失败"
+                notify_error(message or "未知错误")
             else:
-                self.status_lbl.text = "Ready"
+                self.status_lbl.text = "任务已完成，内容已更新"
                 self._reload_editor()
                 self._paint_nav()
                 self._paint_inspector()
         flush_tokens()
-

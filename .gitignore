@@ -5,6 +5,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.build-venv-windows/
+release/
 .pytest_cache/
 .mypy_cache/
 # Secrets — never commit. Copy .env.example to .env locally.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "novel-factory"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Single-machine AI novel factory: plan, write, review, revise."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,12 @@ models = [
 gui = [
   "nicegui>=2.5",
 ]
+desktop = [
+  "nicegui[native]>=3.0",
+  "keyring>=25.0",
+  "pillow>=10.0",
+  "pyinstaller>=6.0",
+]
 test = [
   "pytest>=8.0",
 ]
@@ -31,12 +37,16 @@ test = [
 [project.scripts]
 factory = "factory.cli:app"
 factory-gui = "factory.gui.app:main"
+storyfactory = "factory.gui.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["factory*"]
 
 [tool.setuptools.package-data]
 factory = ["prompts/**/*.md"]
+
+[tool.setuptools.dynamic]
+version = {attr = "factory.version.__version__"}
 
 [tool.pytest.ini_options]
 pythonpath = [".", "tests"]
