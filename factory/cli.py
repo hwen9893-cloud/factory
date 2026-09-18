@@ -48,9 +48,11 @@ app = typer.Typer(
 memory_app = typer.Typer(help="Show layered story memory")
 character_app = typer.Typer(help="List characters")
 plot_app = typer.Typer(help="List plot threads")
+framework_app = typer.Typer(help="Validate, preview, and import a Markdown novel framework")
 app.add_typer(memory_app, name="memory")
 app.add_typer(character_app, name="character")
 app.add_typer(plot_app, name="plot")
+app.add_typer(framework_app, name="framework")
 
 BookOpt = Annotated[Optional[str], typer.Option("--book", "-b", help="Book id (default: last init / FACTORY_BOOK)")]
 
@@ -126,6 +128,49 @@ def architect_cmd(book: BookOpt = None) -> None:
     title = (result.get("outline") or result.get("architecture") or {}).get("title") or book_id
     typer.echo(f"architect  {book_id}  {title}")
     typer.echo("next        factory plan-volume 1   or   factory continue")
+
+
+@framework_app.command("validate")
+def framework_validate_cmd(
+    source: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    book: str = typer.Option("preview", "--book", "-b"),
+) -> None:
+    """Parse and validate a framework without changing the project."""
+    payload = _try(lambda: _service().preview_framework(book, source, mode="merge"))
+    _print_framework_preview(payload)
+    if not payload.get("valid"):
+        raise typer.Exit(1)
+
+
+@framework_app.command("preview")
+def framework_preview_cmd(
+    source: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    book: str = typer.Option("preview", "--book", "-b"),
+    mode: str = typer.Option("merge", "--mode", help="create | merge | replace"),
+) -> None:
+    """Show import validation and entity-level changes; do not write."""
+    payload = _try(lambda: _service().preview_framework(book, source, mode=mode))
+    _print_framework_preview(payload)
+
+
+@framework_app.command("import")
+def framework_import_cmd(
+    source: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    book: str = typer.Option(..., "--book", "-b"),
+    mode: str = typer.Option("merge", "--mode", help="create | merge | replace"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Commit without interactive confirmation"),
+) -> None:
+    """Preview, confirm, then commit a framework import."""
+    service = _service()
+    preview = _try(lambda: service.preview_framework(book, source, mode=mode))
+    _print_framework_preview(preview)
+    if not preview.get("valid"):
+        _fail("framework validation failed; import was not written")
+    if not yes and not typer.confirm("Apply these changes?"):
+        typer.echo("cancelled")
+        raise typer.Exit(0)
+    result = _try(lambda: service.import_framework(book, source, mode=mode))
+    typer.echo(f"imported  {result['book_id']}  operation {result['operation_id']}")
 
 
 @app.command("plan-volume")
@@ -383,12 +428,16 @@ def print_progress(event: WorkflowEvent) -> None:
 
 _CLI_STAGE_TEXT = {
     "chapter_planner": "Planning",
+    "scene_planner": "Planning scenes",
     "chapter_writer": "Writing",
     "continuity_check": "Checking continuity",
     "continuity": "Checking continuity",
     "quality_review": "Reviewing",
     "reviewer": "Reviewing",
     "revision": "Revising",
+    "content_revision": "Repairing content",
+    "style_polish": "Polishing style",
+    "final_validate": "Validating final draft",
     "memory_update": "Updating memory",
     "memory": "Updating memory",
     "volume_planner": "Planning volume",
@@ -423,6 +472,19 @@ def _chapter_line(result: dict[str, Any], *, prefix: str) -> str:
     words = result.get("word_count")
     extra = f"  {words}字" if words else ""
     return f"{prefix}  ch {ch_no}  {title}{extra}".rstrip()
+
+
+def _print_framework_preview(payload: dict[str, Any]) -> None:
+    typer.echo(f"valid      {'yes' if payload.get('valid') else 'no'}")
+    typer.echo(f"operation  {payload.get('operation_id') or '—'}")
+    summary = payload.get("summary") or {}
+    typer.echo(
+        "changes    "
+        + "  ".join(f"{key}={summary.get(key, 0)}" for key in ("add", "modify", "conflict", "delete_candidate", "unchanged"))
+    )
+    for issue in payload.get("issues") or []:
+        where = f" line {issue.get('source_line')}" if issue.get("source_line") else ""
+        typer.echo(f"  {issue.get('level')} {issue.get('code')}{where}: {issue.get('message')}")
 
 
 def _fail(message: str) -> None:

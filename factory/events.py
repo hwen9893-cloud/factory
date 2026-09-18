@@ -16,12 +16,16 @@ WORKFLOW_COMPLETED = "workflow_completed"
 # Pipeline stage id → agent id. Not display labels.
 _AGENT_FOR_STAGE = {
     "chapter_planner": "chapter_planner",
+    "scene_planner": "scene_planner",
     "chapter_writer": "chapter_writer",
     "continuity_check": "continuity",
     "continuity": "continuity",
     "quality_review": "reviewer",
     "reviewer": "reviewer",
     "revision": "revision",
+    "content_revision": "content_revision",
+    "style_polish": "style_polisher",
+    "final_validate": "final_validator",
     "memory_update": "memory",
     "memory": "memory",
     "volume_planner": "volume_planner",

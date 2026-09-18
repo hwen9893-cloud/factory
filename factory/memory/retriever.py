@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
+import json
 from typing import Any
 
 from factory.memory.store import MemoryStore
 from factory.memory.types import (
     CharacterEntity,
+    ContextBundle,
+    ContextRequest,
     PlotThread,
     RecentChapter,
     StoryMemory,
@@ -66,6 +69,37 @@ class MemoryRetriever:
             current_tasks=list(memory.plot.current_tasks),
             recent_events=list(memory.plot.major_events[-8:]),
         )
+
+    def retrieve(self, request: ContextRequest) -> ContextBundle:
+        """Build a priority-ordered, budgeted long-form context without a second retrieval system."""
+        from factory.framework import StoryBibleRepository
+        from factory.state import StoryStateRepository
+
+        writer = self.for_writer(request.chapter_no, chapter_plan=request.chapter_plan)
+        bible = StoryBibleRepository(self.repo, self.book_id).load()
+        state = StoryStateRepository(self.repo, self.book_id).load()
+        summary = "\n".join(f"第{item.ch_no}章：{item.summary}" for item in writer.recent_chapters if item.summary)
+        excerpt = next((item.body_excerpt for item in reversed(writer.recent_chapters) if item.body_excerpt), "")
+        bundle = ContextBundle(
+            hard_rules=list(bible.world.rules),
+            relevant_world={"summary": bible.world.summary},
+            cultivation_rules=bible.world.cultivation.model_dump(mode="json"),
+            relevant_characters=writer.characters,
+            relevant_locations=[item.model_dump(mode="json") for item in bible.world.locations if not request.locations or item.id in request.locations],
+            relevant_factions=[item.model_dump(mode="json") for item in bible.world.factions if not request.factions or item.id in request.factions],
+            golden_finger_rules=[item.model_dump(mode="json") for item in bible.golden_fingers],
+            current_story_state=state.model_dump(mode="json"),
+            relevant_foreshadowing=[item.model_dump(mode="json") for item in bible.foreshadowing],
+            hook_history=[item.model_dump(mode="json") for item in state.hook_ledger],
+            payoff_history=[item.model_dump(mode="json") for item in state.payoff_ledger],
+            recent_summary=summary,
+            recent_excerpt=excerpt,
+            chapter_intent=request.chapter_plan,
+            scene_plan=request.scene_plan,
+            style_guide=bible.style_guide.model_dump(mode="json"),
+        )
+        _fit_budget(bundle, max(256, request.token_budget))
+        return bundle
 
     def _relevant_characters(
         self,
@@ -191,3 +225,22 @@ def _volume_slice(volume_plan: dict[str, Any] | None, ch_no: int) -> dict[str, A
         "theme": volume_plan.get("theme"),
         "chapter": chapter or {},
     }
+
+
+def _fit_budget(bundle: ContextBundle, token_budget: int) -> None:
+    """Trim lowest-priority context first using a conservative character estimate."""
+    def estimate() -> int:
+        return max(1, len(json.dumps(bundle.prompt_vars(), ensure_ascii=False)) // 2)
+
+    trims = (
+        lambda: setattr(bundle, "recent_excerpt", bundle.recent_excerpt[: max(0, len(bundle.recent_excerpt) // 2)]),
+        lambda: setattr(bundle, "recent_summary", bundle.recent_summary[: max(0, len(bundle.recent_summary) // 2)]),
+        lambda: setattr(bundle, "relevant_locations", bundle.relevant_locations[: max(0, len(bundle.relevant_locations) // 2)]),
+        lambda: setattr(bundle, "relevant_factions", bundle.relevant_factions[: max(0, len(bundle.relevant_factions) // 2)]),
+        lambda: setattr(bundle, "relevant_foreshadowing", bundle.relevant_foreshadowing[: max(0, len(bundle.relevant_foreshadowing) // 2)]),
+        lambda: setattr(bundle, "relevant_world", {}),
+    )
+    for trim in trims:
+        if estimate() <= token_budget:
+            break
+        trim()

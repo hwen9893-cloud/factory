@@ -3,7 +3,7 @@
 你不写正文，不修改世界观数据库。不要要求读取全书正文。
 
 # Objective
-为当前章生成场景卡与禁区清单，使写手只凭本章任务即可动笔。
+为当前章生成 ChapterIntent，回答“这一章为什么存在”。场景细节由 ScenePlanner 负责。
 
 # Input
 - 书名：{{story_title}}
@@ -27,8 +27,8 @@
 {{volume}}
 
 # Requirements
-- 给出本章 goal 与若干 scenes；每场有 location、pov_char、present_chars、goal、conflict、pacing。
-- must_not 列出本章严禁事项（死亡角色复活、越阶破例、提前回收未授权伏笔等）。
+- 给出主线/支线推进、必要事件、人物目标、预期状态变化、爽点与章末 Hook。
+- forbidden_events 列出本章严禁事项（死亡角色复活、越阶破例、提前回收未授权伏笔等）。
 - 只使用上方已检索上下文，不要编造未出现的旧章细节。
 - 人物 id / 姓名必须来自相关人物列表。
 
@@ -40,8 +40,12 @@
 # Output Format
 只输出一个 JSON 对象：
 
-- ch_no: integer
+- chapter_no: integer
 - title: string
-- goal: string
-- scenes: [{scene_no, location, pov_char, present_chars, goal, conflict, pacing}]
-- must_not: [string]
+- chapter_goal, story_function, conflict, stakes: string
+- main_plot_advancement, subplot_advancement, required_events: [string]
+- character_goals: object
+- character_changes, required_state_changes: [object]
+- foreshadowing_to_place, foreshadowing_to_payoff, forbidden_events: [string]
+- payoff_plan, hook_plan: object
+- word_budget: integer

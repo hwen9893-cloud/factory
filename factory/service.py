@@ -11,6 +11,7 @@ from typing import Any
 
 from factory.agents import AGENT_CLASSES, CHAPTER_AGENTS
 from factory.events import ProgressCallback, error_event, discard_progress, stage_completed, stage_started
+from factory.framework import FrameworkImporter, ImportMode
 from factory.memory import build_store
 from factory.models.client import ModelClient
 from factory.models.keys import env_names_for, key_configured, key_hint, scrub_secrets
@@ -157,6 +158,33 @@ class FactoryService:
         self.repo.init_book(name, title=title or name, genre=genre, style=style, story_seed=seed)
         self.repo.set_current_book(name)
         return self.repo.book_dir(name)
+
+    def preview_framework(
+        self,
+        book_id: str,
+        path: Path,
+        *,
+        mode: str = "merge",
+    ) -> dict[str, Any]:
+        preview = FrameworkImporter(self.repo).preview(book_id, Path(path), mode=ImportMode(mode))
+        return preview.model_dump(mode="json") | {"valid": preview.valid, "summary": preview.summary()}
+
+    def import_framework(
+        self,
+        book_id: str,
+        path: Path,
+        *,
+        mode: str = "merge",
+    ) -> dict[str, Any]:
+        importer = FrameworkImporter(self.repo)
+        preview = importer.preview(book_id, Path(path), mode=ImportMode(mode))
+        bible = importer.commit(preview)
+        return {
+            "book_id": book_id,
+            "operation_id": preview.operation_id,
+            "summary": preview.summary(),
+            "story_bible": bible.model_dump(mode="json"),
+        }
 
     def book_status(self, book_id: str) -> BookStatus:
         wf = self._workflow(book_id)
@@ -718,7 +746,7 @@ class FactoryService:
         target_words: int | None = None,
     ) -> dict[str, Any]:
         self._stash(book_id, ch_no, title, body)
-        return self._run(book_id, ch_no, ("chapter_planner",), model=model, target_words=target_words)
+        return self._run(book_id, ch_no, ("chapter_planner", "scene_planner"), model=model, target_words=target_words)
 
     def generate(
         self,
@@ -731,9 +759,12 @@ class FactoryService:
         target_words: int | None = None,
     ) -> dict[str, Any]:
         self._stash(book_id, ch_no, title, body)
+        saved_plan = self.repo.load_chapter_plan(book_id, ch_no)
         steps: tuple[str, ...] = ("chapter_writer",)
-        if not self.repo.load_chapter_plan(book_id, ch_no):
+        if not saved_plan:
             steps = ("chapter_planner", "chapter_writer")
+        elif not saved_plan.get("scenes"):
+            steps = ("scene_planner", "chapter_writer")
         return self._run(book_id, ch_no, steps, model=model, target_words=target_words)
 
     def review(

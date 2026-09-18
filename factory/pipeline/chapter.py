@@ -12,6 +12,7 @@ from factory.events import ProgressCallback, error_event, discard_progress, stag
 from factory.storage import BookRepository
 from factory.pipeline.models import (
     ChapterDraft,
+    ChapterIntent,
     ChapterPlan,
     ChapterRecord,
     ContinuityReport,
@@ -20,18 +21,25 @@ from factory.pipeline.models import (
     PipelineState,
     ReviewResult,
     RevisionRequest,
+    ScenePlan,
     StageEvent,
     retrieved_from_writer_context,
 )
+from factory.pipeline.quality import FinalValidator
+from factory.schema.contracts import StoryStateDelta
+from factory.state import AtomicFinalizer
 
 logger = logging.getLogger("factory.pipeline")
 
 AGENT_TO_STAGE = {
     "chapter_planner": "chapter_planner",
+    "scene_planner": "scene_planner",
     "chapter_writer": "chapter_writer",
     "continuity": "continuity_check",
     "reviewer": "quality_review",
     "revision": "revision",
+    "content_revision": "content_revision",
+    "style_polisher": "style_polish",
     "memory": "memory_update",
 }
 
@@ -39,13 +47,17 @@ STAGE_ORDER = (
     "load_story_context",
     "retrieve_relevant_memory",
     "chapter_planner",
+    "scene_planner",
     "chapter_writer",
     "continuity_check",
     "quality_review",
     "decision",
     "revision",
-    "save",
+    "content_revision",
+    "style_polish",
+    "final_validate",
     "memory_update",
+    "save",
     "persist",
 )
 
@@ -87,6 +99,15 @@ class ChapterProductionPipeline:
             loaded = self.repo.load_pipeline_state(self.state.book_id, self.state.ch_no)
             if loaded:
                 self.state = PipelineState.model_validate(loaded)
+                # Migrate checkpoints written before content/style and transactional state stages.
+                if self.state.next_stage == "revision" and "content_revision" in self.wanted:
+                    self.state.next_stage = "content_revision"
+                if (
+                    self.state.next_stage == "save"
+                    and self.state.story_state_delta is None
+                    and "memory_update" in self.wanted
+                ):
+                    self.state.next_stage = "memory_update"
                 if self.state.status == "completed" and self.state.record:
                     self._emit("resume: chapter already completed")
                     return self._result()
@@ -101,10 +122,14 @@ class ChapterProductionPipeline:
         self._run("load_story_context", self._load_story_context)
         self._run("retrieve_relevant_memory", self._retrieve_relevant_memory)
         self._run("chapter_planner", self._chapter_planner)
+        self._run("scene_planner", self._scene_planner)
         self._run("chapter_writer", self._chapter_writer)
         self._qa_loop()
-        self._run("save", self._save)
+        self.state.corrected_draft = self.state.draft
+        self._run("style_polish", self._style_polish)
+        self._run("final_validate", self._final_validate)
         self._run("memory_update", self._memory_update)
+        self._run("save", self._save)
         self._run("persist", self._persist)
         self.state.status = "completed"
         self.state.next_stage = "done"
@@ -113,11 +138,14 @@ class ChapterProductionPipeline:
         return self._result()
 
     def _qa_loop(self) -> None:
-        qa = self.wanted & {"continuity_check", "quality_review", "decision", "revision"}
+        qa = self.wanted & {"continuity_check", "quality_review", "decision", "revision", "content_revision"}
         if not qa:
             return
         if qa == {"revision"}:
             self._run("revision", self._revision)
+            return
+        if qa == {"content_revision"}:
+            self._run("content_revision", self._content_revision)
             return
         while True:
             self._run("continuity_check", self._continuity_check)
@@ -132,9 +160,10 @@ class ChapterProductionPipeline:
                 if self.state.record is None:
                     pass
                 break
-            if "revision" not in self.wanted:
+            revision_stage = "content_revision" if "content_revision" in self.wanted else "revision"
+            if revision_stage not in self.wanted:
                 break
-            self._run("revision", self._revision)
+            self._run(revision_stage, self._content_revision if revision_stage == "content_revision" else self._revision)
             self.state.revision_attempt += 1
             self._resume_skip = False
             self._emit(f"  re-review after revision {self.state.revision_attempt}/{self.state.max_revisions}")
@@ -172,18 +201,22 @@ class ChapterProductionPipeline:
 
     def _next_after(self, stage: str) -> str:
         if stage == "decision" and self.state.decision:
-            return "revision" if self.state.decision.action == "revision" else "save"
-        if stage == "revision":
+            revision_stage = "content_revision" if "content_revision" in self.wanted else "revision"
+            return revision_stage if self.state.decision.action == "revision" else "style_polish"
+        if stage in {"revision", "content_revision"}:
             return "continuity_check"
         return {
             "load_story_context": "retrieve_relevant_memory",
             "retrieve_relevant_memory": "chapter_planner",
-            "chapter_planner": "chapter_writer",
+            "chapter_planner": "scene_planner",
+            "scene_planner": "chapter_writer",
             "chapter_writer": "continuity_check",
             "continuity_check": "quality_review",
             "quality_review": "decision",
-            "save": "memory_update",
-            "memory_update": "persist",
+            "style_polish": "final_validate",
+            "final_validate": "memory_update",
+            "memory_update": "save",
+            "save": "persist",
             "persist": "done",
         }.get(stage, "done")
 
@@ -212,7 +245,19 @@ class ChapterProductionPipeline:
 
     def _chapter_planner(self) -> None:
         result = self._run_agent("chapter_planner")
+        self.state.intent = ChapterIntent.model_validate(result.get("chapter_intent") or result["chapter_plan"])
         self.state.plan = ChapterPlan.model_validate(result["chapter_plan"])
+
+    def _scene_planner(self) -> None:
+        result = self._run_agent("scene_planner")
+        self.state.intent = ChapterIntent.model_validate(result.get("chapter_intent") or self.state.intent)
+        self.state.scenes = [ScenePlan.model_validate(item) for item in result.get("scene_plan") or []]
+        self.state.plan = ChapterPlan.from_intent(self.state.intent, self.state.scenes)
+        self.repo.save_chapter_plan(
+            self.state.book_id,
+            self.state.ch_no,
+            self.state.plan.model_dump(mode="json"),
+        )
 
     def _chapter_writer(self) -> None:
         result = self._run_agent("chapter_writer")
@@ -243,6 +288,12 @@ class ChapterProductionPipeline:
         self._emit(f"  decision={action} passed={self.state.decision.passed} reasons={self.state.decision.reasons}")
 
     def _revision(self) -> None:
+        self._revise_with("revision")
+
+    def _content_revision(self) -> None:
+        self._revise_with("content_revision")
+
+    def _revise_with(self, agent_name: str) -> None:
         self._require_draft()
         if self.state.review is None:
             raw = self.repo.load_review(self.state.book_id, self.state.ch_no)
@@ -252,7 +303,7 @@ class ChapterProductionPipeline:
             raw = self.repo.load_continuity(self.state.book_id, self.state.ch_no)
             if raw:
                 self.state.continuity = ContinuityReport.from_llm(raw)
-        result = self._run_agent("revision")
+        result = self._run_agent(agent_name)
         self.state.draft = ChapterDraft.model_validate(
             {
                 "ch_no": result["ch_no"],
@@ -262,6 +313,51 @@ class ChapterProductionPipeline:
                 "revision": self.state.revision_attempt + 1,
             }
         )
+
+    def _style_polish(self) -> None:
+        self._require_draft()
+        result = self._run_agent("style_polisher")
+        self.state.polished_draft = ChapterDraft.model_validate(
+            {
+                "ch_no": result["ch_no"],
+                "title": result["title"],
+                "body": result["body"],
+                "word_count": result.get("word_count") or len(result["body"]),
+                "revision": self.state.revision_attempt,
+            }
+        )
+        self.state.draft = self.state.polished_draft
+
+    def _final_validate(self) -> None:
+        corrected = self.state.corrected_draft or self._require_draft()
+        polished = self.state.polished_draft or self._require_draft()
+        intent = self.state.intent or (self.state.plan.intent if self.state.plan else None)
+        if intent is None:
+            raise ValueError("final validation requires ChapterIntent")
+        result = FinalValidator().validate(
+            corrected=corrected.body,
+            polished=polished.body,
+            intent=intent,
+            scenes=self.state.scenes,
+            protected_facts=self._protected_facts(),
+        )
+        if not result.valid:
+            raise ValueError("; ".join(result.issues))
+
+    def _protected_facts(self) -> dict[str, list[str]]:
+        facts: dict[str, list[str]] = {"character": [], "cultivation": [], "location": [], "status": []}
+        for char in self.context.characters:
+            for category, key in (
+                ("character", "name"),
+                ("cultivation", "cultivation_realm"),
+                ("cultivation", "sub_realm"),
+                ("location", "location"),
+                ("status", "status"),
+            ):
+                value = str(char.get(key) or "").strip()
+                if value:
+                    facts[category].append(value)
+        return facts
 
     def _save(self) -> None:
         draft = self._require_draft()
@@ -274,7 +370,6 @@ class ChapterProductionPipeline:
             status = "revised"
         else:
             status = "passed"
-        self.repo.save_final(self.state.book_id, draft.ch_no, draft.title, draft.body)
         self.state.record = ChapterRecord(
             ch_no=draft.ch_no,
             title=draft.title,
@@ -286,15 +381,43 @@ class ChapterProductionPipeline:
             revision_attempts=self.state.revision_attempt,
             status=status,
             word_count=draft.word_count,
+            operation_id=self.state.story_state_delta.operation_id if self.state.story_state_delta else "",
+            state_version_before=self.state.story_state_delta.base_state_version if self.state.story_state_delta else 0,
+            state_version_after=(self.state.story_state_delta.base_state_version + 1) if self.state.story_state_delta else 0,
+            chapter_plan_id=f"chapter-plan-{draft.ch_no:06d}",
+            scene_plan_ids=[item.scene_id for item in self.state.scenes],
+            continuity_issue_count=len(continuity.all_conflicts),
+            polish_result="applied" if self.state.polished_draft else "skipped",
+            delta_id=self.state.story_state_delta.operation_id if self.state.story_state_delta else "",
+            finalization_status="committed",
+        )
+        if self.state.story_state_delta is None:
+            raise ValueError("atomic finalization requires StoryStateDelta; run memory extraction first")
+
+        def project_legacy_memory() -> None:
+            from factory.agents.memory import persist_legacy_projection
+
+            memory = self.runtime.memory_updater.apply(draft.ch_no, self.state.memory_update)
+            persist_legacy_projection(self.repo, self.state.book_id, draft.ch_no, self.state.memory_update)
+            self.context.apply_memory(memory, self.runtime.memory_store.load_chapter_memories())
+
+        AtomicFinalizer(self.repo, self.state.book_id).finalize(
+            title=draft.title,
+            body=draft.body,
+            record=self.state.record.model_dump(mode="json", by_alias=True),
+            delta=self.state.story_state_delta,
+            legacy_apply=project_legacy_memory,
         )
 
     def _memory_update(self) -> None:
         result = self._run_agent("memory")
         self.state.memory_update = dict(result.get("memory_update") or {})
+        self.state.story_state_delta = StoryStateDelta.model_validate(result["story_state_delta"])
 
     def _persist(self) -> None:
-        if self.state.record:
-            self.repo.save_chapter_record(self.state.book_id, self.state.ch_no, self.state.record.model_dump(mode="json", by_alias=True))
+        # Chapter record is committed with final text and StoryState in AtomicFinalizer.
+        if not self.state.record:
+            raise ValueError("no finalized chapter record")
 
     def _agent_state(self) -> dict[str, Any]:
         draft = self.state.draft
@@ -309,6 +432,10 @@ class ChapterProductionPipeline:
             payload.update(memory.model_dump(mode="json"))
         if plan:
             payload["chapter_plan"] = plan.model_dump(mode="json")
+        if self.state.intent:
+            payload["chapter_intent"] = self.state.intent.model_dump(mode="json")
+        if self.state.scenes:
+            payload["scene_plan"] = [item.model_dump(mode="json") for item in self.state.scenes]
         if draft:
             payload["title"] = draft.title
             payload["body"] = draft.body
@@ -342,6 +469,10 @@ class ChapterProductionPipeline:
             payload = {"ch_no": self.state.ch_no}
             if self.state.plan:
                 payload["chapter_plan"] = self.state.plan.model_dump(mode="json")
+            if self.state.intent:
+                payload["chapter_intent"] = self.state.intent.model_dump(mode="json")
+            if self.state.scenes:
+                payload["scene_plan"] = [item.model_dump(mode="json") for item in self.state.scenes]
             if self.state.draft:
                 payload["title"] = self.state.draft.title
                 payload["body"] = self.state.draft.body
@@ -351,6 +482,8 @@ class ChapterProductionPipeline:
             if self.state.review:
                 payload["review"] = self.state.review.model_dump(mode="json", by_alias=True)
         payload["memory_update"] = self.state.memory_update
+        if self.state.story_state_delta:
+            payload["story_state_delta"] = self.state.story_state_delta.model_dump(mode="json")
         payload["pipeline"] = {
             "status": self.state.status,
             "revision_attempts": self.state.revision_attempt,
@@ -379,12 +512,20 @@ def expand_stages(agents: Iterable[str] | None) -> set[str]:
     for name in names:
         if name in AGENT_TO_STAGE:
             wanted.add(AGENT_TO_STAGE[name])
+    # Existing user workflows may predate the explicit scene-planning stage.
+    # Whenever they request both planning and writing, insert the new contract boundary.
+    if "chapter_planner" in named and "chapter_writer" in named:
+        wanted.add("scene_planner")
     if named == {"revision"}:
         return wanted
     if "memory" in named:
         wanted.update({"decision", "save", "persist"})
     if "revision" in named:
         wanted.update({"continuity_check", "quality_review", "decision", "revision"})
+    if "content_revision" in named:
+        wanted.update({"continuity_check", "quality_review", "decision", "content_revision"})
+    if "style_polisher" in named:
+        wanted.update({"style_polish", "final_validate"})
     return wanted
 
 

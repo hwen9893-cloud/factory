@@ -6,6 +6,10 @@ from typing import Any
 
 from factory.agents.base import BaseAgent
 from factory.pipeline.models import ChapterDraft, ContinuityReport, ReviewResult, RevisionRequest
+from factory.pipeline.models import ChapterIntent, ScenePlan
+from factory.pipeline.rules import ContinuityRuleValidator
+from factory.framework import StoryBibleRepository
+from factory.state import StoryStateRepository
 
 CONTINUITY_SCHEMA = ContinuityReport.model_json_schema()
 REVIEW_SCHEMA = ReviewResult.model_json_schema()
@@ -29,6 +33,21 @@ class ContinuityAgent(BaseAgent):
         extra = self.retrieved_vars(state, ch_no, chapter_plan=plan, query_text=body[:800])
         characters = extra.get("relevant_characters") or extra.get("characters") or self.context.characters
         rule_issues = collect_continuity_issues(body, characters)
+        bible = StoryBibleRepository(self.repo, self.context.book_id).load()
+        story_state = StoryStateRepository(self.repo, self.context.book_id).load()
+        raw_intent = state.get("chapter_intent") or plan.get("intent")
+        intent = ChapterIntent.model_validate(raw_intent) if raw_intent else None
+        scenes = [ScenePlan.model_validate(item) for item in state.get("scene_plan") or []]
+        rule_issues.extend(
+            ContinuityRuleValidator().validate(
+                body=body,
+                chapter_no=ch_no,
+                bible=bible,
+                state=story_state,
+                intent=intent,
+                scenes=scenes,
+            )
+        )
         extra.update({"body": body, "rule_issues": rule_issues, "chapter_plan": plan})
         report = ContinuityReport.from_llm(self.ask_json(purpose="continuity", extra_vars=extra), rule_issues)
         payload = report.model_dump(mode="json")
@@ -57,12 +76,12 @@ class ReviewerAgent(BaseAgent):
         return {"review": payload, "ch_no": ch_no, "title": title, "body": body}
 
 
-class RevisionAgent(BaseAgent):
+class ContentRevisionAgent(BaseAgent):
     """Rewrite from a RevisionRequest. Does not decide pass/fail and does not save final."""
 
-    name = "revision"
+    name = "content_revision"
     model = "writer"
-    prompt_name = "revision"
+    prompt_name = "content_revision"
     temperature = 0.55
     max_retries = 1
     required_outputs = ("title", "body")
@@ -107,6 +126,37 @@ class RevisionAgent(BaseAgent):
             "word_count": draft.word_count,
             "draft": draft.model_dump(mode="json"),
         }
+
+
+class RevisionAgent(ContentRevisionAgent):
+    """Compatibility name for saved workflows and model assignments."""
+
+    name = "revision"
+    prompt_name = "revision"
+
+
+class StylePolisherAgent(BaseAgent):
+    """Improve expression only; final validation rejects protected fact changes."""
+
+    name = "style_polisher"
+    model = "writer"
+    prompt_name = "style_polisher"
+    temperature = 0.45
+    max_retries = 1
+    required_outputs = ("title", "body")
+
+    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+        ch_no = int(state.get("ch_no") or self.context.current_chapter)
+        title, body = self.chapter_text(state, ch_no)
+        polished = self.ask_text(
+            extra_vars={
+                "body": body,
+                "chapter_plan": state.get("chapter_plan") or {},
+                "style_guide": state.get("style_guide") or self.context.style,
+            }
+        )
+        draft = ChapterDraft(ch_no=ch_no, title=title, body=polished, revision=int((state.get("draft") or {}).get("revision") or 0))
+        return {"ch_no": ch_no, "title": title, "body": polished, "word_count": draft.word_count, "draft": draft.model_dump(mode="json")}
 
 
 def collect_continuity_issues(body: str, characters: list[dict[str, Any]]) -> list[dict[str, str]]:

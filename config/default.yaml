@@ -85,10 +85,16 @@ agents:
     model: planner
   chapter_planner:
     model: planner
+  scene_planner:
+    model: planner
   continuity:
     model: reviewer
   reviewer:
     model: reviewer
+  content_revision:
+    model: writer
+  style_polisher:
+    model: writer
   memory:
     model: reviewer
 
@@ -102,10 +108,12 @@ workflows:
     - volume_planner
   chapter:
     - chapter_planner
+    - scene_planner
     - chapter_writer
     - continuity
     - reviewer
-    - revision
+    - content_revision
+    - style_polisher
     - memory
   plan:
     - world_builder
@@ -114,12 +122,14 @@ workflows:
     - outline
     - volume_planner
     - chapter_planner
+    - scene_planner
   write:
     - chapter_writer
   review:
     - continuity
     - reviewer
-    - revision
+    - content_revision
+    - style_polisher
     - memory
   run:
     - world_builder
@@ -128,10 +138,12 @@ workflows:
     - outline
     - volume_planner
     - chapter_planner
+    - scene_planner
     - chapter_writer
     - continuity
     - reviewer
-    - revision
+    - content_revision
+    - style_polisher
     - memory
 
 workflow:
@@ -141,10 +153,12 @@ workflow:
   - outline
   - volume_planner
   - chapter_planner
+  - scene_planner
   - chapter_writer
   - continuity
   - reviewer
-  - revision
+  - content_revision
+  - style_polisher
   - memory
 
 memory:

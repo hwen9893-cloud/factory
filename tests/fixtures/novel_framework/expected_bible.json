@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "title": "古剑长夜",
+  "genre": "修仙",
+  "premise": "陆沉追查灭门真相。",
+  "character_ids": ["char.luchen"],
+  "realm_ids": ["realm.qi", "realm.foundation"],
+  "faction_ids": ["faction.qingyun"],
+  "location_ids": ["location.mountain"],
+  "golden_finger_ids": ["golden.sword"],
+  "antagonist_stage_ids": ["villain.outer"],
+  "main_plot_phase_ids": ["plot.truth"],
+  "payoff_rule_ids": ["payoff.reverse"],
+  "hook_rule_ids": ["hook.secret"],
+  "chapter_numbers": [1],
+  "forbidden_rules": ["无代价越阶"]
+}

@@ -187,6 +187,17 @@ MOCK_STRUCTURED: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    "scene_plan": {
+        "scenes": [
+            {
+                "scene_id": "ch0001.sc01", "scene_no": 1, "location": "青岚宗外门演武场",
+                "pov": "knowledge.character.0001", "present_characters": ["knowledge.character.0001", "knowledge.character.0002"],
+                "scene_goal": "完成试炼中的第一次公开反击", "obstacle": "外门弟子当众挑衅",
+                "beats": ["建立压迫", "陆沉反击"], "word_budget": 1800,
+                "covers_required_events": ["完成试炼中的第一次公开反击"],
+            }
+        ]
+    },
     "continuity": {
         "character_conflicts": [],
         "timeline_conflicts": [],

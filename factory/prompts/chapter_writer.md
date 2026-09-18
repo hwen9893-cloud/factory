@@ -19,6 +19,10 @@
 {{plot_context}}
 - 本章任务：
 {{chapter_plan}}
+- ChapterIntent：
+{{chapter_intent}}
+- 已验证场景计划：
+{{scene_plan}}
 - 近章记忆与上章文末：
 {{recent_context}}
 - 当前冲突：{{current_conflict}}
@@ -31,7 +35,7 @@
 {{must_not}}
 
 # Requirements
-- 只写本章正文，覆盖场景卡中的目标与冲突，篇幅约 {{chapter_target_words}} 字。
+- 严格按 ScenePlan 顺序执行场景，不重新设计剧情；覆盖每场 beats 与目标，篇幅约 {{chapter_target_words}} 字。
 - 声线、节奏服从 {{style}}。
 - 人物言行必须符合其当前状态与声线。
 - 遵守 must_not；不得使用未出现在上下文中的旧章“回忆”当新事实。

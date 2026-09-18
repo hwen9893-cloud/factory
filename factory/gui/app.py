@@ -25,6 +25,7 @@ def run_studio(
         raise ImportError('Chapter Studio needs NiceGUI. pip install -e ".[gui]"') from exc
 
     from factory.gui.bible import build_bible
+    from factory.gui.framework import build_framework
     from factory.gui.dashboard import build_dashboard
     from factory.gui.memory import build_memory
     from factory.gui.logs import build_logs
@@ -53,6 +54,10 @@ def run_studio(
     @ui.page("/outline")
     def outline_page() -> None:
         build_outline(book_id=book, settings=resolved)
+
+    @ui.page("/framework")
+    def framework_page() -> None:
+        build_framework(book_id=book, settings=resolved)
 
     @ui.page("/memory")
     def memory_page() -> None:

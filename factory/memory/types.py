@@ -249,3 +249,53 @@ class WriterContext:
             "current_tasks": self.current_tasks,
             "recent_events": self.recent_events,
         }
+
+
+@dataclass(frozen=True)
+class ContextRequest:
+    chapter_no: int
+    chapter_plan: dict[str, Any] = field(default_factory=dict)
+    scene_plan: list[dict[str, Any]] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
+    locations: list[str] = field(default_factory=list)
+    factions: list[str] = field(default_factory=list)
+    plot_threads: list[str] = field(default_factory=list)
+    required_rules: list[str] = field(default_factory=list)
+    token_budget: int = 12000
+
+
+@dataclass
+class ContextBundle:
+    hard_rules: list[str] = field(default_factory=list)
+    relevant_world: dict[str, Any] = field(default_factory=dict)
+    cultivation_rules: dict[str, Any] = field(default_factory=dict)
+    relevant_characters: list[dict[str, Any]] = field(default_factory=list)
+    relevant_locations: list[dict[str, Any]] = field(default_factory=list)
+    relevant_factions: list[dict[str, Any]] = field(default_factory=list)
+    golden_finger_rules: list[dict[str, Any]] = field(default_factory=list)
+    current_story_state: dict[str, Any] = field(default_factory=dict)
+    relevant_foreshadowing: list[dict[str, Any]] = field(default_factory=list)
+    hook_history: list[dict[str, Any]] = field(default_factory=list)
+    payoff_history: list[dict[str, Any]] = field(default_factory=list)
+    recent_summary: str = ""
+    recent_excerpt: str = ""
+    chapter_intent: dict[str, Any] = field(default_factory=dict)
+    scene_plan: list[dict[str, Any]] = field(default_factory=list)
+    style_guide: dict[str, Any] = field(default_factory=dict)
+
+    def prompt_vars(self) -> dict[str, Any]:
+        return {
+            "canon": {"rules": self.hard_rules, **self.relevant_world},
+            "world_context": self.relevant_world,
+            "relevant_characters": self.relevant_characters,
+            "character_context": self.relevant_characters,
+            "plot_threads": self.relevant_foreshadowing,
+            "plot_context": self.relevant_foreshadowing,
+            "recent_summaries": self.recent_summary,
+            "prev_tail": self.recent_excerpt,
+            "recent_context": f"{self.recent_summary}\n\n上章文末：\n{self.recent_excerpt}",
+            "chapter_plan": self.chapter_intent,
+            "scene_plan": self.scene_plan,
+            "story_state": self.current_story_state,
+            "style_guide": self.style_guide,
+        }

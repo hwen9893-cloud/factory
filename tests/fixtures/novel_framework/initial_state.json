@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "state_version": 0,
+  "current_chapter": 1,
+  "current_time": "",
+  "characters": {
+    "char.luchen": {
+      "id": "char.luchen",
+      "realm": "realm.qi",
+      "location": "location.mountain",
+      "status": "alive"
+    }
+  },
+  "relationships": [],
+  "character_knowledge": {},
+  "golden_fingers": {},
+  "events": [],
+  "open_threads": [],
+  "resolved_threads": [],
+  "placed_foreshadowing": [],
+  "resolved_foreshadowing": [],
+  "hook_ledger": [],
+  "payoff_ledger": [],
+  "applied_operations": []
+}

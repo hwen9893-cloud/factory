@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from factory.agents.base import BaseAgent
-from factory.pipeline.models import ChapterDraft, ChapterPlan
+from factory.pipeline.models import ChapterDraft, ChapterIntent, ChapterPlan, ScenePlan
 
 
 class ChapterPlannerAgent(BaseAgent):
@@ -16,7 +16,7 @@ class ChapterPlannerAgent(BaseAgent):
     prompt_name = "chapter_planner"
     temperature = 0.35
     required_outputs = ("chapter_plan",)
-    output_schema = ChapterPlan.model_json_schema()
+    output_schema = ChapterIntent.model_json_schema()
 
     def execute(self, state: dict[str, Any]) -> dict[str, Any]:
         ch_no = int(state.get("ch_no") or self.context.current_chapter)
@@ -30,11 +30,13 @@ class ChapterPlannerAgent(BaseAgent):
                 "volume_chapter": self.context.volume_chapter(ch_no) or {},
             }
         )
-        plan = self.ask_json(purpose="chapter_plan", extra_vars=extra)
-        plan["ch_no"] = ch_no
-        payload = ChapterPlan.model_validate(plan).model_dump(mode="json")
+        raw = self.ask_json(purpose="chapter_plan", extra_vars=extra)
+        raw["chapter_no"] = ch_no
+        intent = ChapterIntent.model_validate(raw)
+        plan = ChapterPlan.from_intent(intent)
+        payload = plan.model_dump(mode="json")
         self.repo.save_chapter_plan(self.context.book_id, ch_no, payload)
-        return {"chapter_plan": payload, "ch_no": ch_no}
+        return {"chapter_intent": intent.model_dump(mode="json"), "chapter_plan": payload, "ch_no": ch_no}
 
 
 class ChapterWriterAgent(BaseAgent):
@@ -51,14 +53,35 @@ class ChapterWriterAgent(BaseAgent):
         plan = state.get("chapter_plan") or self.repo.load_chapter_plan(self.context.book_id, ch_no)
         if not plan:
             raise ValueError(f"no chapter plan for chapter {ch_no}; run chapter_planner first")
-        title = str(plan.get("title") or f"第{ch_no}章")
+        raw_intent = state.get("chapter_intent") or plan.get("intent") or plan
+        intent = ChapterIntent.model_validate(raw_intent)
+        scenes = [ScenePlan.model_validate(item) for item in state.get("scene_plan") or []]
+        if not scenes and plan.get("scenes"):
+            scenes = [
+                ScenePlan(
+                    scene_id=f"ch{ch_no:04d}.sc{int(item.get('scene_no') or index):02d}",
+                    scene_no=int(item.get("scene_no") or index),
+                    location=str(item.get("location") or ""),
+                    pov=str(item.get("pov_char") or ""),
+                    present_characters=list(item.get("present_chars") or []),
+                    scene_goal=str(item.get("goal") or ""),
+                    obstacle=str(item.get("conflict") or ""),
+                    covers_required_events=[intent.required_events[min(index - 1, len(intent.required_events) - 1)]] if intent.required_events else [],
+                )
+                for index, item in enumerate(plan.get("scenes") or [], 1)
+            ]
+        if not scenes:
+            raise ValueError(f"no validated scene plan for chapter {ch_no}; run scene_planner first")
+        title = intent.title or f"第{ch_no}章"
         extra = self.retrieved_vars(state, ch_no, chapter_plan=plan)
         extra.update(
             {
                 "title": title,
-                "scenes": plan.get("scenes") or [],
-                "must_not": plan.get("must_not") or [],
-                "chapter_goal": plan.get("goal") or "",
+                "chapter_intent": intent.model_dump(mode="json"),
+                "scene_plan": [item.model_dump(mode="json") for item in scenes],
+                "scenes": [item.model_dump(mode="json") for item in scenes],
+                "must_not": intent.forbidden_events,
+                "chapter_goal": intent.chapter_goal,
             }
         )
         body = self.ask_text(extra_vars=extra)

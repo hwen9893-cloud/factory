@@ -77,6 +77,7 @@ class Character(SchemaModel):
     secrets: list[str] = Field(default_factory=list)
     status: str = "alive"
     voice_style: str = ""
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("age", mode="before")
     @classmethod
@@ -112,6 +113,9 @@ class CultivationRealm(SchemaModel):
     stages: list[str] = Field(default_factory=list)
     typical_lifespan: str = ""
     notes: str = ""
+    previous: str = ""
+    next: str = ""
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -194,6 +198,7 @@ class Faction(SchemaModel):
     allies: list[str] = Field(default_factory=list)
     enemies: list[str] = Field(default_factory=list)
     important_members: list[str] = Field(default_factory=list)
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("territory", "allies", "enemies", "important_members", mode="before")
     @classmethod
@@ -220,6 +225,7 @@ class Location(SchemaModel):
     danger_level: str = ""
     factions: list[str] = Field(default_factory=list)
     resources: list[str] = Field(default_factory=list)
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("factions", "resources", mode="before")
     @classmethod
@@ -253,6 +259,7 @@ class PlotThread(SchemaModel):
     expected_payoff: str = ""
     payoff_chapter: int | None = None
     priority: int = 3
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("involved_characters", mode="before")
     @classmethod
@@ -288,6 +295,7 @@ class Foreshadowing(SchemaModel):
     resolved: bool = False
     resolution: str = ""
     related_thread_id: str = ""
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod

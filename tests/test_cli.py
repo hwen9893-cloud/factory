@@ -14,6 +14,21 @@ from helpers import seed_book, settings_for
 
 
 class CliTest(unittest.TestCase):
+    def test_framework_preview_and_import(self) -> None:
+        fixture = Path(__file__).parent / "fixtures" / "novel_framework" / "framework.md"
+        with tempfile.TemporaryDirectory() as raw:
+            settings = settings_for(Path(raw))
+
+            def fake_load(*_args, **_kwargs) -> Settings:
+                return settings
+
+            buf = io.StringIO()
+            with patch("factory.cli.load_settings", fake_load), patch("sys.stdout", buf):
+                self.assertEqual(main(["framework", "preview", str(fixture), "--book", "imported", "--mode", "create"]), 0)
+                self.assertEqual(main(["framework", "import", str(fixture), "--book", "imported", "--mode", "create", "--yes"]), 0)
+            self.assertTrue((Path(raw) / "imported" / "framework" / "story_bible.v2.json").exists())
+            self.assertIn("imported  imported", buf.getvalue())
+
     def test_init_status_character_list(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

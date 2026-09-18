@@ -39,3 +39,36 @@ __all__ = [
     "WorldSetting",
     "upsert_by_id",
 ]
+from factory.schema.contracts import (
+    AntagonistStage,
+    CharacterKnowledgeState,
+    FactSource,
+    GoldenFingerDefinition,
+    GoldenFingerState,
+    HookRule,
+    LedgerEntry,
+    MainPlotPhase,
+    PayoffRule,
+    Provenance,
+    StoryBible,
+    StoryState,
+    StoryStateDelta,
+    StyleGuide,
+)
+
+__all__ = [
+    "AntagonistStage",
+    "CharacterKnowledgeState",
+    "FactSource",
+    "GoldenFingerDefinition",
+    "GoldenFingerState",
+    "HookRule",
+    "LedgerEntry",
+    "MainPlotPhase",
+    "PayoffRule",
+    "Provenance",
+    "StoryBible",
+    "StoryState",
+    "StoryStateDelta",
+    "StyleGuide",
+]

@@ -1,12 +1,14 @@
-"""Memory agent: extract structured residue, then MemoryUpdater merges and persists."""
+"""Memory agent: extract a StoryStateDelta; it never mutates persistent state."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from factory.agents.base import BaseAgent
-from factory.schema.models import Character, PlotThread
-from factory.schema.store import SchemaStore
+import hashlib
+
+from factory.schema.contracts import EntityChange, StoryStateDelta
+from factory.state import StoryStateRepository
 
 MEMORY_SCHEMA = {
     "type": "object",
@@ -28,7 +30,7 @@ MEMORY_SCHEMA = {
 
 
 class MemoryAgent(BaseAgent):
-    """Memory Extractor. Does not write prose; MemoryUpdater owns the merge."""
+    """Memory extractor. AtomicFinalizer owns every persistent mutation."""
 
     name = "memory"
     model = "reviewer"
@@ -45,13 +47,47 @@ class MemoryAgent(BaseAgent):
         extra = self.retrieved_vars(state, ch_no, chapter_plan=chapter_plan, query_text=body[:800])
         extra.update({"body": body, "ch_no": ch_no, "chapter_plan": chapter_plan})
         update = self.ask_json(purpose="memory", extra_vars=extra)
-        memory = self.updater.apply(ch_no, update)
-        self.context.apply_memory(memory, self.memory_store.load_chapter_memories())
-        _persist_schema(self.repo, self.context.book_id, ch_no, update)
-        return {"memory_update": update, "ch_no": ch_no}
+        current = StoryStateRepository(self.repo, self.context.book_id).load()
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+        operation_id = f"chapter.{ch_no:06d}.{digest}"
+        raw_changes = list(update.get("character_changes") or update.get("character_state") or [])
+        changes = []
+        for raw in raw_changes:
+            if not isinstance(raw, dict) or not raw.get("id"):
+                continue
+            patch = {key: value for key, value in raw.items() if key not in {"id"} and value not in (None, "")}
+            changes.append(EntityChange(id=str(raw["id"]), patch=patch))
+        resolved = []
+        for item in update.get("resolved_threads") or []:
+            if isinstance(item, dict):
+                resolved.append(str(item.get("id") or item.get("text") or item.get("summary") or ""))
+            else:
+                resolved.append(str(item))
+        delta = StoryStateDelta(
+            operation_id=operation_id,
+            chapter_no=ch_no,
+            base_state_version=current.state_version,
+            character_changes=changes,
+            relationship_changes=list((update.get("entity_updates") or {}).get("relationships") or []),
+            timeline_events=list(update.get("events") or update.get("timeline_events") or []),
+            new_facts=[str(item) for item in (update.get("new_facts") or update.get("facts") or [])],
+            new_threads=[_as_mapping(item) for item in (update.get("unresolved_threads") or [])],
+            resolved_threads=[item for item in resolved if item],
+            knowledge_changes=list(update.get("knowledge_changes") or []),
+            foreshadowing_changes=list(update.get("foreshadowing_changes") or []),
+        )
+        return {
+            "memory_update": update,
+            "story_state_delta": delta.model_dump(mode="json"),
+            "ch_no": ch_no,
+        }
 
 
-def _persist_schema(repo: Any, book_id: str, ch_no: int, update: dict[str, Any]) -> None:
+def persist_legacy_projection(repo: Any, book_id: str, ch_no: int, update: dict[str, Any]) -> None:
+    """Compatibility projection, invoked inside AtomicFinalizer's rollback boundary."""
+    from factory.schema.models import Character, PlotThread
+    from factory.schema.store import SchemaStore
+
     store = SchemaStore(repo, book_id)
     for raw in update.get("unresolved_threads") or []:
         payload = _as_mapping(raw)

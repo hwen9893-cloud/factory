@@ -6,7 +6,7 @@ from nicegui import ui
 
 NAV_GROUPS: tuple[tuple[str, tuple[tuple[str, str, str, str], ...]], ...] = (
     ("工作区", (("dashboard", "首页", "/", "space_dashboard"), ("studio", "创作工作台", "/studio", "edit_note"), ("outline", "章节大纲", "/outline", "account_tree"))),
-    ("资料库", (("bible", "世界设定", "/bible", "public"), ("memory", "创作记忆", "/memory", "memory"))),
+    ("资料库", (("bible", "世界设定", "/bible", "public"), ("framework", "框架导入", "/framework", "upload_file"), ("memory", "创作记忆", "/memory", "memory"))),
     ("系统", (("models", "AI 模型", "/models", "smart_toy"), ("logs", "运行记录", "/logs", "receipt_long"), ("settings", "系统设置", "/settings", "settings"))),
 )
 

@@ -4,7 +4,7 @@
 
 当前是可运行骨架。默认 `provider: mock`，不需要 API key，也不打真实模型。
 
-`docs/` 是早期策略稿，不参与运行。
+长篇生产链的实现与迁移说明见 [docs/LONGFORM_PRODUCTION.md](docs/LONGFORM_PRODUCTION.md)。
 
 ## 目录
 
@@ -35,7 +35,7 @@
 Novel Factory 把一本长篇拆成固定步骤，每步一个 Agent：
 
 - 开书：世界观 → 人物 → 故事骨架 → 总纲 → 分卷计划
-- 单章：本章任务 → 正文 → 连续性检查 → 审稿 → 有限次改稿 → 写入 memory
+- 单章：章节意图 → 场景规划 → 正文 → 连续性检查 → 内容修订 → 文风润色 → 原子定稿
 
 输入是故事种子和 YAML 配置。输出是 `data/books/{book_id}/` 下的 JSON / Markdown 文件。
 
@@ -59,7 +59,7 @@ python -m factory --help
 | Prompt 是 Markdown 文件 | `factory/prompts/*.md`。占位符 `{{var}}`，不用 Jinja2。 |
 | 模型名不写进 Python | 写在 YAML 的 `models.*`。密钥只在 `.env`。 |
 | 不把全书正文塞进模型 | `MemoryRetriever` 只拼 canon、相关人物、相关伏笔、本卷切片、本章任务、近章摘要、上章文末。 |
-| 一步一件事 | Writer 只写正文。Reviewer 只评估。Revision 只改稿。Continuity 只查设定。Memory 只归档。 |
+| 一步一件事 | Writer 只写正文。Reviewer 只评估。ContentRevision 修内容。StylePolisher 只润色。Continuity 查设定。Memory 只提议 StateDelta。 |
 
 配置优先级（后者覆盖前者）：
 
@@ -94,10 +94,11 @@ SimpleWorkflow(settings, book_id)
         │
         └── ChapterProductionPipeline
               load context → retrieve memory
-              → chapter_planner → chapter_writer
+              → chapter_planner → scene_planner → chapter_writer
               → continuity → reviewer → decision
-                    ├─ pass → save
-                    └─ fail → revision → re-review（≤ max_revision_rounds）
+                    ├─ pass → style polish → final validate
+                    └─ fail → content revision → re-review（≤ max_revision_rounds）
+              → state delta → atomic finalize
               → memory_update → persist
         │
         ▼
